@@ -220,3 +220,41 @@ ab_test_button:
   - css: "#thumbnail-ab-test-button"
 ab_add_thumbnail_input:
   - css: "ytcp-thumbnail-ab-editor input[type='file']"
+
+# ------------------------------------------------- video duzenleme sayfasi
+#  studio.youtube.com/video/<id>/edit
+#  Baslik/aciklama/etiket alanlari yukleme penceresiyle ayni seciciyi kullanir.
+edit_page_ready:
+  - css: "ytcp-video-metadata-editor"
+  - css: "ytcp-uploads-basics"
+edit_visibility_dropdown:
+  - css: "ytcp-video-visibility-select ytcp-text-dropdown-trigger"
+  - css: "#visibility-container ytcp-text-dropdown-trigger"
+  - css: "ytcp-form-select#privacy ytcp-text-dropdown-trigger"
+edit_visibility_option_public:
+  - text: "Herkese açık"
+  - text: "Public"
+edit_visibility_option_unlisted:
+  - text: "Liste dışı"
+  - text: "Unlisted"
+edit_visibility_option_private:
+  - text: "Gizli"
+  - text: "Private"
+edit_save_button:
+  - css: "ytcp-button#save"
+  - css: "#save"
+  - role: "button|Kaydet|Save"
+edit_saved_badge:
+  - text: "Kaydedildi"
+  - text: "Saved"
+  - css: "ytcp-video-metadata-editor-sidepanel .saved"
+
+# ------------------------------------------------------------ sonda kontrol
+#  huscc probe bu anahtarlari canli Studio'da tek tek dener.
+probe_studio_home:
+  - css: "ytcp-navigation-drawer"
+  - css: "#menu-container"
+  - css: "ytcp-header"
+probe_video_list:
+  - css: "ytcp-video-section-content"
+  - css: "#video-list"

@@ -11,7 +11,7 @@ from . import brief as brief_mod
 from . import media, pipeline, publish_browser, subtitles, thumbnail, youtube
 from .config import Config, load_config
 from .discover import list_videos
-from .util import HusccError, err, human_size, info, ok, step, warn
+from .util import HusccError, err, human_size, info, ok, read_json, step, warn, write_json
 
 BANNER = r"""
   _   _           ____ ____
@@ -249,9 +249,10 @@ def cmd_list(args) -> int:
 def cmd_prep(args) -> int:
     cfg = _cfg(args)
     job = pipeline.make_job(cfg, args.name)
-    pipeline.prep(
-        job, brain=args.brain, frame_count=args.frames, do_subtitles=not args.no_subs
-    )
+    with job.log():
+        pipeline.prep(
+            job, brain=args.brain, frame_count=args.frames, do_subtitles=not args.no_subs
+        )
     print()
     if args.brain == "claude-code" and brief_mod.load_brief(job.work) is None:
         print(f"Siradaki adim -> Claude su dosyayi okusun: {job.work / 'ANALIZ.md'}")
@@ -300,12 +301,13 @@ def cmd_brief(args) -> int:
 def cmd_render(args) -> int:
     cfg = _cfg(args)
     job = pipeline.make_job(cfg, args.name)
-    pipeline.render(
-        job,
-        skip_edit=args.skip_edit,
-        make_shorts=False if args.no_shorts else None,
-        image_source=args.image_source,
-    )
+    with job.log():
+        pipeline.render(
+            job,
+            skip_edit=args.skip_edit,
+            make_shorts=False if args.no_shorts else None,
+            image_source=args.image_source,
+        )
     print()
     print(f'Siradaki adim -> huscc upload "{job.video.name}"')
     return 0
@@ -314,23 +316,29 @@ def cmd_render(args) -> int:
 def cmd_upload(args) -> int:
     cfg = _cfg(args)
     job = pipeline.make_job(cfg, args.name)
-    pipeline.upload(job, dry_run=args.dry_run, upload_shorts=args.shorts, via=args.via)
+    with job.log():
+        pipeline.upload(
+            job, dry_run=args.dry_run, upload_shorts=args.shorts,
+            via=args.via, force=args.force,
+        )
     return 0
 
 
 def cmd_publish(args) -> int:
     cfg = _cfg(args)
     job = pipeline.make_job(cfg, args.name)
-    pipeline.publish(
-        job,
-        brain=args.brain,
-        dry_run=args.dry_run,
-        skip_edit=args.skip_edit,
-        upload_shorts=args.shorts,
-        frame_count=args.frames,
-        image_source=args.image_source,
-        via=args.via,
-    )
+    with job.log():
+        pipeline.publish(
+            job,
+            brain=args.brain,
+            dry_run=args.dry_run,
+            skip_edit=args.skip_edit,
+            upload_shorts=args.shorts,
+            frame_count=args.frames,
+            image_source=args.image_source,
+            via=args.via,
+            force=args.force,
+        )
     return 0
 
 
@@ -360,6 +368,182 @@ def cmd_web(args) -> int:
     cfg = _cfg(args)
     print(BANNER)
     serve(cfg, host=args.host, port=args.port, open_browser=not args.no_open)
+    return 0
+
+
+def cmd_probe(args) -> int:
+    """Secici haritasini canli Studio'da dener - hicbir sey yuklemez."""
+    cfg = _cfg(args)
+    from . import studio
+
+    video_id = args.video or ""
+    if not video_id:
+        history = read_json(cfg.history_file, []) or []
+        for record in reversed(history):
+            if record.get("video_id"):
+                video_id = record["video_id"]
+                info(f"Gecmisten video alindi: {video_id}")
+                break
+
+    step("Secici sondasi")
+    report = publish_browser.probe(cfg, video_id=video_id)
+    broken = studio.print_probe(report)
+
+    path = cfg.work_dir / "probe" / "rapor.json"
+    write_json(path, report)
+    print()
+    print(f"  Rapor: {path}")
+    if broken:
+        err(f"{broken} secici tutmadi.")
+        print("  Duzeltmek icin config/selectors.yaml icindeki ilgili anahtarin")
+        print("  basina dogru seciciyi ekleyin (ekran goruntuleri: work/probe/).")
+        return 1
+    ok("Tum seciciler tuttu.")
+    return 0
+
+
+def cmd_update(args) -> int:
+    """Yayindaki videonun meta verisini gunceller."""
+    cfg = _cfg(args)
+    job = pipeline.make_job(cfg, args.name)
+    fields = set(args.fields.split(",")) if args.fields else None
+    with job.log():
+        pipeline.update(job, fields=fields, video_id=args.video, rebuild=args.rebuild)
+    return 0
+
+
+def cmd_publish_all(args) -> int:
+    """CC klasorundeki yayinlanmamis tum videolari sirayla yayinlar."""
+    cfg = _cfg(args)
+    videos = list_videos(cfg.video_dir)
+    if not videos:
+        warn(f"{cfg.video_dir} bos.")
+        return 0
+
+    pending = []
+    for video in videos:
+        job = pipeline.make_job(cfg, video.name)
+        if pipeline.already_published(job) and not args.force:
+            continue
+        pending.append(job)
+
+    if not pending:
+        ok("Yayinlanmamis video yok.")
+        return 0
+
+    step(f"{len(pending)} video sirada")
+    for index, job in enumerate(pending, start=1):
+        print(f"  {index}. {job.video.path.name}")
+    if args.limit:
+        pending = pending[: args.limit]
+
+    done, failed = [], []
+    for index, job in enumerate(pending, start=1):
+        print()
+        step(f"[{index}/{len(pending)}] {job.video.path.name}")
+        try:
+            with job.log():
+                pipeline.publish(
+                    job,
+                    brain=args.brain,
+                    dry_run=args.dry_run,
+                    image_source=args.image_source,
+                    via=args.via,
+                    force=args.force,
+                )
+            done.append(job.video.path.name)
+        except HusccError as exc:
+            err(str(exc))
+            failed.append((job.video.path.name, str(exc).splitlines()[0]))
+            if args.stop_on_error:
+                break
+
+    print()
+    print("=" * 72)
+    ok(f"Tamamlanan: {len(done)}")
+    for name in done:
+        print(f"    + {name}")
+    if failed:
+        err(f"Basarisiz: {len(failed)}")
+        for name, reason in failed:
+            print(f"    - {name}: {reason}")
+    print("=" * 72)
+    return 1 if failed else 0
+
+
+def _yaml_set(text: str, section: str, key: str, value: str) -> str:
+    """channel.yaml icindeki tek bir degeri, yorumlari bozmadan degistirir."""
+    lines = text.splitlines()
+    in_section = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not line.startswith((" ", "\t")):
+            in_section = stripped.rstrip(":") == section
+            continue
+        if in_section and stripped.split(":")[0].strip() == key:
+            indent = line[: len(line) - len(line.lstrip())]
+            comment = ""
+            if "#" in line:
+                comment = "  " + line[line.index("#") :]
+            lines[index] = f'{indent}{key}: "{value}"{comment}'
+            return "\n".join(lines) + "\n"
+    return text
+
+
+def _ask(prompt: str, default: str = "") -> str:
+    suffix = f" [{default}]" if default else ""
+    try:
+        answer = input(f"  {prompt}{suffix}: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return default
+    return answer or default
+
+
+def cmd_init(args) -> int:
+    """Kanal bilgilerini sorup config/channel.yaml dosyasini gunceller."""
+    cfg = _cfg(args)
+    path = cfg.root / "config" / "channel.yaml"
+    text = path.read_text(encoding="utf-8")
+
+    print(BANNER)
+    step("Kanal kurulumu")
+    print("  Enter'a basarak mevcut degeri koruyabilirsiniz.")
+    print()
+
+    answers = {
+        ("channel", "name"): _ask("Kanal adi", str(cfg.get("channel.name", "HusCC"))),
+        ("channel", "handle"): _ask("Kanal etiketi (@...)", str(cfg.get("channel.handle", ""))),
+        ("upload", "privacy"): _ask(
+            "Gizlilik (public/unlisted/private)", str(cfg.get("upload.privacy", "public"))
+        ),
+        ("upload", "schedule"): _ask(
+            "Yayin zamani (auto = prime-time, bos = hemen)",
+            str(cfg.get("upload.schedule", "auto")),
+        ),
+        ("thumbnail", "source"): _ask(
+            "Kapak kaynagi (auto/api/browser/frame)", str(cfg.get("thumbnail.source", "auto"))
+        ),
+        ("paths", "video_dir"): _ask(
+            "Video klasoru", str(cfg.get("paths.video_dir", "~/Desktop/CC"))
+        ),
+    }
+    for (section, key), value in answers.items():
+        text = _yaml_set(text, section, key, value)
+
+    path.write_text(text, encoding="utf-8")
+    ok(f"Yazildi: {path}")
+
+    fresh = load_config()
+    video_dir = fresh.video_dir
+    video_dir.mkdir(parents=True, exist_ok=True)
+    print()
+    print(f"  Video klasoru : {video_dir}")
+    print(f"  Kanal         : {fresh.channel_name} {fresh.handle}")
+    print()
+    print("  Siradaki adim :  huscc login")
     return 0
 
 
@@ -436,6 +620,8 @@ def build_parser() -> argparse.ArgumentParser:
     upload.add_argument("--shorts", action="store_true", help="Shorts'lari da yukle")
     upload.add_argument("--via", choices=["browser", "api"],
                         help="Yayin yolu (varsayilan: config > upload.via)")
+    upload.add_argument("--force", action="store_true",
+                        help="Daha once yayinlanmis olsa bile tekrar yukle (kopya olusur)")
     upload.set_defaults(func=cmd_upload)
 
     publish = sub.add_parser("publish", help="Bastan sona: analiz -> kurgu -> yayin")
@@ -449,6 +635,8 @@ def build_parser() -> argparse.ArgumentParser:
                          help="Kapak arka plani: ChatGPT API / tarayici / video karesi")
     publish.add_argument("--via", choices=["browser", "api"],
                          help="Yayin yolu (varsayilan: config > upload.via)")
+    publish.add_argument("--force", action="store_true",
+                         help="Daha once yayinlanmis olsa bile tekrar yukle")
     publish.set_defaults(func=cmd_publish)
 
     status = sub.add_parser("status", help="Durum / yayin gecmisi")
@@ -460,6 +648,34 @@ def build_parser() -> argparse.ArgumentParser:
     web.add_argument("--host", default="127.0.0.1")
     web.add_argument("--no-open", action="store_true", help="Tarayiciyi acma")
     web.set_defaults(func=cmd_web)
+
+    sub.add_parser("init", help="Kanal bilgilerini sor ve yapilandirmayi yaz").set_defaults(
+        func=cmd_init
+    )
+
+    probe = sub.add_parser("probe", help="Secicileri canli Studio'da dene (yukleme yapmaz)")
+    probe.add_argument("--video", help="Denenecek video kimligi (varsayilan: gecmisteki son video)")
+    probe.set_defaults(func=cmd_probe)
+
+    update = sub.add_parser("update", help="Yayindaki videonun meta verisini guncelle")
+    update.add_argument("name")
+    update.add_argument("--video", help="Video kimligi (varsayilan: kayitli olan)")
+    update.add_argument("--fields",
+                        help="Virgulle: title,description,tags,thumbnail,playlist,visibility")
+    update.add_argument("--rebuild", action="store_true",
+                        help="Meta veriyi brief'ten yeniden uret (SEO tazele)")
+    update.set_defaults(func=cmd_update)
+
+    publish_all = sub.add_parser("publish-all", help="Yayinlanmamis tum videolari sirayla yayinla")
+    publish_all.add_argument("--brain", choices=["claude-code", "api", "heuristic"],
+                             default="heuristic")
+    publish_all.add_argument("--limit", type=int, help="En fazla kac video")
+    publish_all.add_argument("--dry-run", action="store_true")
+    publish_all.add_argument("--force", action="store_true")
+    publish_all.add_argument("--stop-on-error", action="store_true")
+    publish_all.add_argument("--image-source", choices=["auto", "api", "browser", "frame"])
+    publish_all.add_argument("--via", choices=["browser", "api"])
+    publish_all.set_defaults(func=cmd_publish_all)
 
     clean = sub.add_parser("clean", help="Ara dosyalari sil")
     clean.add_argument("name", nargs="?")

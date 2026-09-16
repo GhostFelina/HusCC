@@ -88,15 +88,54 @@ huscc render  "video adı"            # kapak + meta veri + kurgu
 huscc upload  "video adı" --dry-run  # ön kontroller + önizleme
 huscc upload  "video adı"            # Studio'da yayınla
 
-huscc login                          # Google girişi
+huscc login                          # Google girişi (bir kerelik)
+huscc probe                          # seçicileri canlı Studio'da dene (yükleme yapmaz)
+huscc update "video adı" --rebuild   # yayındaki videonun meta verisini tazele
+huscc publish-all --limit 3          # birikmiş kayıtları sırayla yayınla
+huscc init                           # kanal bilgilerini sor, yapılandırmayı yaz
 huscc studio                         # Studio'yu HusCC tarayıcısında aç
 huscc web                            # yerel panel (127.0.0.1:8765)
 huscc status                         # yayın geçmişi
 huscc doctor --browser               # oturumu da doğrulayarak kontrol
 ```
 
+### İlk kurulumdan sonra: `huscc probe`
+
+Hiçbir şey yüklemeden Studio'yu gezer ve seçici haritasındaki her anahtarın tutup
+tutmadığını tek tek raporlar:
+
+```
+  Studio ana sayfası
+  + probe_studio_home            css=ytcp-navigation-drawer
+  + create_button                css=ytcp-button#create-icon
+  Yükleme penceresi
+  + upload_dialog                css=ytcp-uploads-dialog
+  + file_input                   css=input[type='file'] (gizli)
+```
+
+`TUTMADI` gören her satır, ilk gerçek yayında patlayacak demektir — önce onu düzelt.
+
+### Çift yükleme koruması
+
+Bir video daha önce yayınlandıysa `huscc upload` reddeder ve mevcut kaydı gösterir.
+Meta veriyi değiştirmek istiyorsan `huscc update`, gerçekten ikinci kopya istiyorsan
+`--force`.
+
 İsim eşleştirme esnek: tam ad, ad parçası, `son`, hatta
 `"kızılay saldırısı isimli videomu paylaş"` çalışır.
+
+---
+
+## Yayındaki videoyu güncelleme
+
+Başlığı, açıklamayı, etiketleri veya kapağı sonradan değiştirmek için video yeniden
+yüklenmez; Studio'daki düzenleme sayfası güncellenir:
+
+```bash
+huscc update "video adı"                        # kayıtlı meta veriyi tekrar yaz
+huscc update "video adı" --rebuild              # brief'ten SEO'yu yeniden üret
+huscc update "video adı" --fields title,thumbnail
+```
 
 ---
 
@@ -107,6 +146,7 @@ Bir adım tıkanırsa süreç çökmez:
 
 * `work/<slug>/browser/SORUN.md` — ne oldu, ne denendi, nasıl düzeltilir
 * `work/<slug>/browser/HATA-<adım>.png` — o andaki ekran görüntüsü
+* `work/<slug>/log.txt` — o işin tüm terminal çıktısı
 * Tarayıcı penceresi **açık bırakılır**, elle tamamlayabilirsin
 
 Düzeltmek için doğru seçiciyi ilgili anahtarın başına eklemen yeterli:
@@ -119,6 +159,7 @@ publish_button:
 ```
 
 Metin tabanlı seçiciler hem Türkçe hem İngilizce arayüzü kapsar.
+Düzelttiğini `huscc probe` ile yükleme yapmadan doğrulayabilirsin.
 
 ---
 

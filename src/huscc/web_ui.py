@@ -109,6 +109,11 @@ PAGE = r"""<!DOCTYPE html>
         <button onclick="run('render')">2 · Kurgu + Kapak</button>
         <button onclick="run('upload')">3 · Yukle</button>
       </div>
+      <div class="row" style="margin-bottom:10px">
+        <button class="ghost" onclick="run('update')">Meta veriyi guncelle</button>
+        <button class="ghost" onclick="runOpts('update',{rebuild:true})">SEO'yu tazele + guncelle</button>
+        <button class="ghost" onclick="run('probe')">Secici sondasi</button>
+      </div>
       <div class="row">
         <label class="opt">Beyin
           <select id="brain">
@@ -123,6 +128,7 @@ PAGE = r"""<!DOCTYPE html>
         <label class="opt"><input type="checkbox" id="upload_shorts"> Shorts'u da yukle</label>
         <label class="opt"><input type="checkbox" id="dry_run"> Deneme (yukleme yok)</label>
         <label class="opt"><input type="checkbox" id="skip_edit"> Kurguyu atla</label>
+        <label class="opt"><input type="checkbox" id="force"> Yayinlanmis olsa da yukle</label>
         <label class="opt">Yayin yolu
           <select id="via">
             <option value="">config (varsayilan)</option>
@@ -203,6 +209,7 @@ PAGE = r"""<!DOCTYPE html>
         <div class="row" style="margin-bottom:10px">
           <button class="primary" onclick="run('login')">Google'a giris yap (tarayici)</button>
           <button class="ghost" onclick="run('doctor')">Sistem kontrolu</button>
+          <button class="ghost" onclick="run('probe')">Secici sondasi calistir</button>
           <button class="ghost" onclick="run('auth')">API yolu icin yetkilendir</button>
         </div>
         <div class="hint" style="margin-bottom:10px">
@@ -282,6 +289,10 @@ async function select(name){
   drawVideos(BOOT.videos||[]);
   DETAIL = await api('/api/detail/' + encodeURIComponent(name));
   if(DETAIL.error){ el('selName').textContent = DETAIL.error; return }
+  if(DETAIL.published){
+    el('selName').innerHTML = esc(name) +
+      ` <a href="https://youtu.be/${DETAIL.video_id}" target="_blank" class="tag up">yayinda</a>`;
+  }
   el('briefBox').value = JSON.stringify(DETAIL.brief || DETAIL.draft || {}, null, 2);
   drawThumbs(); drawMeta(); drawFrames(); drawAi(); drawShots();
 }
@@ -404,13 +415,24 @@ function opts(){
     dry_run: el('dry_run').checked,
     image_source: el('image_source').value,
     via: el('via').value,
+    force: el('force').checked,
     skip_edit: el('skip_edit').checked
   };
 }
 
+async function runOpts(action, extra){
+  if(BUSY){ alert('Zaten calisan bir is var.'); return }
+  if(!SEL && !['auth','doctor','login','probe'].includes(action)){ alert('Once bir video secin.'); return }
+  tab('log'); el('log').textContent = '';
+  const r = await api('/api/run', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({action, name: SEL, options: {...opts(), ...(extra||{})}})});
+  if(r.error){ alert(r.error); return }
+  BUSY = true; el('bar').style.width = '8%';
+}
+
 async function run(action){
   if(BUSY){ alert('Zaten calisan bir is var.'); return }
-  if(!SEL && !['auth','doctor','login'].includes(action)){ alert('Once bir video secin.'); return }
+  if(!SEL && !['auth','doctor','login','probe'].includes(action)){ alert('Once bir video secin.'); return }
   tab('log');
   el('log').textContent = '';
   const r = await api('/api/run', {method:'POST', headers:{'Content-Type':'application/json'},

@@ -13,7 +13,7 @@ from . import editor, imagegen, media, publish_browser, seo, subtitles, thumbnai
 from .config import Config
 from .discover import VideoFile, find_video
 from .util import (
-    HusccError, ensure_dir, hhmmss, human_size, info, next_slot, ok,
+    HusccError, ensure_dir, hhmmss, human_size, info, log_to, next_slot, ok,
     opt_path, read_json, slugify, step, utc_now, warn, write_json,
 )
 
@@ -28,6 +28,10 @@ class Job:
     @property
     def state_file(self) -> Path:
         return self.work / "state.json"
+
+    def log(self):
+        """Bu isin tum ekran ciktisini work/<slug>/log.txt dosyasina da yazar."""
+        return log_to(self.work / "log.txt")
 
     def state(self) -> dict:
         return read_json(self.state_file, {}) or {}
@@ -429,10 +433,22 @@ def upload(
     dry_run: bool = False,
     upload_shorts: bool = False,
     via: str | None = None,
+    force: bool = False,
 ) -> dict:
     """Yayin. Varsayilan yol tarayici (Studio); 'api' istenirse Data API."""
     cfg = job.cfg
     state = job.state()
+
+    existing = already_published(job)
+    if existing and not dry_run and not force:
+        raise HusccError(
+            "Bu video daha once yayinlanmis:\n"
+            f"  {existing.get('title', job.video.name)}\n"
+            f"  {existing.get('url', '')}\n"
+            f"  Tarih: {(existing.get('uploaded_at') or '')[:16]}\n\n"
+            "  Meta veriyi guncellemek icin:  huscc update \"" + job.video.name + "\"\n"
+            "  Yeniden yuklemek icin (kopya olusur):  --force"
+        )
     if not state.get("final_video"):
         raise HusccError("Once 'huscc render' calistirin.")
 
@@ -464,6 +480,18 @@ def upload(
     if route == "browser":
         return _upload_browser(job, state, final, meta, upload_shorts=upload_shorts)
     return _upload_api(job, state, final, meta, upload_shorts=upload_shorts)
+
+
+def already_published(job: Job) -> dict | None:
+    """Bu video daha once yayinlandiysa kaydini dondurur."""
+    state = job.state()
+    if state.get("video_id"):
+        return {"video_id": state["video_id"], "url": state.get("url", ""),
+                "title": state.get("title", ""), "uploaded_at": state.get("uploaded_at", "")}
+    for record in reversed(read_json(job.cfg.history_file, []) or []):
+        if record.get("slug") == job.slug and record.get("video_id"):
+            return record
+    return None
 
 
 def _subtitle_map(state: dict) -> dict[str, Path]:
@@ -713,6 +741,7 @@ def publish(
     image_source: str | None = None,
     interactive: bool = True,
     via: str | None = None,
+    force: bool = False,
 ) -> dict:
     """prep -> render -> upload. claude-code beyninde brief yoksa durur."""
     state = job.state()
@@ -729,7 +758,7 @@ def publish(
         )
 
     render(job, skip_edit=skip_edit, image_source=image_source, interactive=interactive)
-    return upload(job, dry_run=dry_run, upload_shorts=upload_shorts, via=via)
+    return upload(job, dry_run=dry_run, upload_shorts=upload_shorts, via=via, force=force)
 
 
 def report(job: Job) -> str:
@@ -749,3 +778,60 @@ def report(job: Job) -> str:
 
 def load_report(path: Path) -> dict[str, Any]:
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+# ------------------------------------------------------- 5. meta veri guncelle
+def update(
+    job: Job,
+    *,
+    fields: set[str] | None = None,
+    video_id: str | None = None,
+    rebuild: bool = False,
+) -> dict:
+    """Yayindaki videonun baslik/aciklama/etiket/kapak/gorunurlugunu gunceller.
+
+    `rebuild=True` ise meta veri brief'ten yeniden uretilir (SEO'yu tazelemek icin).
+    """
+    cfg = job.cfg
+    state = job.state()
+    target = video_id or state.get("video_id") or ""
+    if not target:
+        record = already_published(job)
+        target = (record or {}).get("video_id", "")
+    if not target:
+        raise HusccError(
+            "Bu video icin yayin kaydi yok.\n"
+            "  Once 'huscc upload' ile yayinlayin ya da --video <kimlik> verin."
+        )
+
+    if rebuild:
+        current = brief_mod.load_brief(job.work)
+        if current is None:
+            raise HusccError("brief.json yok - meta veri yeniden uretilemez.")
+        media_info = media.MediaInfo(**{
+            k: val for k, val in (state.get("media") or {}).items()
+            if k in media.MediaInfo.__dataclass_fields__
+        })
+        meta = seo.build_metadata(current, cfg, duration=media_info.duration)
+        write_json(job.work / "metadata.json", meta.to_dict())
+        ok("Meta veri brief'ten yeniden uretildi.")
+    else:
+        meta_dict = state.get("metadata") or {}
+        if not meta_dict:
+            raise HusccError("Kayitli meta veri yok - once 'huscc render' calistirin.")
+        meta = seo.Metadata(**{
+            k: val for k, val in meta_dict.items() if k in seo.Metadata.__dataclass_fields__
+        })
+
+    step(f"Meta veri guncelleniyor - {meta.title}")
+    outcome = publish_browser.update_metadata(
+        cfg,
+        video_id=target,
+        meta=meta,
+        thumbnail=opt_path(state.get("thumbnail")),
+        fields=fields,
+        shots_dir=ensure_dir(job.work / "browser"),
+    )
+    job.save_state(metadata=meta.to_dict(), last_update=utc_now().isoformat())
+    ok(f"Guncellendi: {outcome.get('url', '')}")
+    return outcome

@@ -508,3 +508,164 @@ def verify(s: Session, video_id: str, expected_title: str) -> dict:
     except Exception as exc:  # noqa: BLE001
         warn(f"    dogrulama yapilamadi: {exc}")
     return outcome
+
+
+# ------------------------------------------------ yayinlanmis videoyu guncelle
+EDIT_VISIBILITY_KEYS = {
+    "public": "edit_visibility_option_public",
+    "unlisted": "edit_visibility_option_unlisted",
+    "private": "edit_visibility_option_private",
+}
+
+
+def update_existing(
+    session: Session,
+    video_id: str,
+    plan: UploadPlan,
+    *,
+    fields: set[str] | None = None,
+) -> UploadResult:
+    """Yayindaki bir videonun meta verisini duzenleme sayfasindan gunceller.
+
+    `fields` verilmezse hepsi guncellenir:
+    title, description, tags, thumbnail, playlist, visibility
+    """
+    result = UploadResult(video_id=video_id, url=f"https://youtu.be/{video_id}")
+    run = Runner(session, result)
+    s = session
+    wanted = fields or {"title", "description", "tags", "thumbnail", "playlist", "visibility"}
+
+    log_step(f"Meta veri guncelleniyor - {video_id}")
+    run.step("open_edit", "Duzenleme sayfasi aciliyor",
+             lambda: s.goto(f"https://studio.youtube.com/video/{video_id}/edit"))
+    s.ensure_signed_in()
+    run.step("edit_ready", "Sayfa hazir", lambda: s.find("edit_page_ready", timeout=30_000))
+
+    if "title" in wanted and plan.title:
+        run.step("title", "Baslik", lambda: s.type_into("title_box", plan.title))
+    if "description" in wanted and plan.description:
+        run.step("description", "Aciklama",
+                 lambda: s.type_into("description_box", plan.description))
+    if "thumbnail" in wanted and plan.thumbnail and plan.thumbnail.exists():
+        run.step("thumbnail", "Kucuk resim",
+                 lambda: s.upload_file("thumbnail_input", plan.thumbnail), required=False)
+    if "playlist" in wanted and plan.playlist:
+        run.step("playlist", f"Oynatma listesi: {plan.playlist}",
+                 lambda: _set_playlist(s, plan.playlist), required=False)
+    if "tags" in wanted and plan.tags:
+        run.step("show_more", "Gelismis ayarlar",
+                 lambda: s.click("show_more_button", required=False), required=False)
+        run.step("tags", f"Etiketler ({len(plan.tags)})",
+                 lambda: _set_tags(s, plan.tags), required=False)
+    if "visibility" in wanted:
+        run.step("visibility", f"Gorunurluk: {plan.privacy}",
+                 lambda: _set_edit_visibility(s, plan.privacy), required=False)
+
+    run.step("save", "Kaydediliyor", lambda: _save_edit(s))
+    ok(f"Guncellendi: https://youtu.be/{video_id}")
+    return result
+
+
+def _set_edit_visibility(s: Session, privacy: str) -> None:
+    if not s.click("edit_visibility_dropdown", required=False):
+        return
+    s.page.wait_for_timeout(600)
+    key = EDIT_VISIBILITY_KEYS.get(privacy, "edit_visibility_option_public")
+    if not s.click(key, required=False):
+        warn("    gorunurluk secenegi bulunamadi")
+
+
+def _save_edit(s: Session) -> None:
+    if not s.click("edit_save_button", timeout=15_000, required=False):
+        raise s.failure("edit_save_button", "Kaydet dugmesi bulunamadi")
+    s.page.wait_for_timeout(2_500)
+
+
+# ------------------------------------------------------------ sonda (probe)
+#  Canli Studio'da hangi secicilerin tuttugunu, hicbir sey yuklemeden olcer.
+PROBE_HOME = ["probe_studio_home", "create_button", "signed_in_avatar"]
+PROBE_EDIT = [
+    "edit_page_ready", "title_box", "description_box", "thumbnail_input",
+    "playlist_trigger", "show_more_button", "tags_input",
+    "edit_visibility_dropdown", "edit_save_button",
+]
+PROBE_UPLOAD_DIALOG = ["upload_dialog", "file_input"]
+
+
+def probe(session: Session, *, video_id: str = "") -> dict:
+    """Secici haritasinin canli Studio'da ne kadar tuttugunu raporlar."""
+    report: dict[str, dict] = {"home": {}, "upload_dialog": {}, "edit": {}}
+    s = session
+
+    log_step("Studio ana sayfasi")
+    s.goto("https://studio.youtube.com/")
+    s.ensure_signed_in()
+    s.page.wait_for_timeout(1_500)
+    for key in PROBE_HOME:
+        report["home"][key] = _check(s, key)
+
+    log_step("Yukleme penceresi")
+    try:
+        s.click("create_button", required=False)
+        s.page.wait_for_timeout(800)
+        s.click("upload_menu_item", required=False)
+        s.page.wait_for_timeout(1_500)
+        for key in PROBE_UPLOAD_DIALOG:
+            report["upload_dialog"][key] = _check(s, key)
+        s.click("close_dialog_button", required=False)
+        s.page.wait_for_timeout(800)
+    except Exception as exc:  # noqa: BLE001
+        warn(f"  yukleme penceresi acilamadi: {exc}")
+
+    if video_id:
+        log_step(f"Duzenleme sayfasi ({video_id})")
+        s.goto(f"https://studio.youtube.com/video/{video_id}/edit")
+        s.page.wait_for_timeout(2_500)
+        for key in PROBE_EDIT:
+            report["edit"][key] = _check(s, key)
+    else:
+        info("  Duzenleme sayfasi atlandi (yayinlanmis video yok).")
+
+    return report
+
+
+def _check(s: Session, key: str) -> dict:
+    """Bir anahtarin hangi strateji ile tuttugunu bulur."""
+    for kind, value in s.selectors.strategies(key):
+        try:
+            locator = s._build(kind, value)
+            target = locator.first
+            if target.count() and target.is_visible():
+                return {"ok": True, "matched": f"{kind}={value}"}
+        except Exception:
+            continue
+    # Gorunmez ama DOM'da olabilir (orn. gizli dosya girisi)
+    for kind, value in s.selectors.strategies(key):
+        try:
+            if s._build(kind, value).first.count():
+                return {"ok": True, "matched": f"{kind}={value}", "hidden": True}
+        except Exception:
+            continue
+    return {"ok": False, "matched": ""}
+
+
+def print_probe(report: dict) -> int:
+    """Raporu basar, tutmayan anahtar sayisini dondurur."""
+    broken = 0
+    labels = {"home": "Studio ana sayfasi", "upload_dialog": "Yukleme penceresi",
+              "edit": "Duzenleme sayfasi"}
+    for section, rows in report.items():
+        if not rows:
+            continue
+        print()
+        print(f"  {labels.get(section, section)}")
+        for key, outcome in rows.items():
+            if outcome["ok"]:
+                note = " (gizli)" if outcome.get("hidden") else ""
+                ok(f"  {key:28} {outcome['matched']}{note}")
+            else:
+                broken += 1
+                from .util import err as _err
+
+                _err(f"  {key:28} TUTMADI")
+    return broken

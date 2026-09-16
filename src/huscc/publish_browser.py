@@ -277,3 +277,67 @@ def _post_publish(
                 result.warnings.append("Yayindaki baslik beklenenden farkli gorunuyor.")
         else:
             result.warnings.append("Video dogrulanamadi (planli yayinsa normaldir).")
+
+
+# ------------------------------------------------- yayindaki videoyu guncelle
+def update_metadata(
+    cfg: Config,
+    *,
+    video_id: str,
+    meta: Metadata,
+    thumbnail: Path | None = None,
+    fields: set[str] | None = None,
+    shots_dir: Path | None = None,
+) -> dict:
+    """Yayinlanmis bir videonun meta verisini Studio'dan gunceller."""
+    if not video_id:
+        raise HusccError("Video kimligi gerekli.")
+
+    problems = [p for p in preflight(meta, Path(__file__), thumbnail) if "Video" not in p]
+    if problems:
+        raise HusccError(
+            "Guncelleme oncesi kontrol basarisiz:\n"
+            + "\n".join(f"  - {p}" for p in problems)
+        )
+
+    plan = studio.UploadPlan(
+        video=Path("."),
+        title=meta.title,
+        description=meta.description,
+        tags=meta.tags,
+        playlist=meta.playlist,
+        privacy=meta.privacy,
+        thumbnail=thumbnail,
+        made_for_kids=meta.made_for_kids,
+        category_id=meta.category_id,
+    )
+
+    session = open_session(cfg, shots_dir)
+    try:
+        session.start()
+        session.ensure_signed_in(timeout=float(cfg.get("browser.login_timeout", 900)))
+        _remember(cfg)
+        result = studio.update_existing(session, video_id, plan, fields=fields)
+        return {
+            "video_id": video_id,
+            "url": result.url,
+            "completed": result.completed,
+            "skipped": result.skipped,
+            "warnings": result.warnings,
+        }
+    finally:
+        if not cfg.get("browser.keep_open_on_error", True):
+            session.stop()
+
+
+# ----------------------------------------------------------------- sonda
+def probe(cfg: Config, *, video_id: str = "") -> dict:
+    """Secici haritasinin canli Studio'da ne kadar tuttugunu olcer."""
+    session = open_session(cfg, cfg.work_dir / "probe")
+    try:
+        session.start()
+        report = studio.probe(session, video_id=video_id)
+        _remember(cfg)
+        return report
+    finally:
+        session.stop()

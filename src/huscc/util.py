@@ -77,6 +77,46 @@ def step(msg: str) -> None:
     print(f"\n{_c('1;35', _SYM['step'] + ' ' + safe(msg))}", flush=True)
 
 
+def log_to(path: Path):
+    """Ekrana basilan her seyi ayni anda bir dosyaya da yazar."""
+    import contextlib
+
+    @contextlib.contextmanager
+    def _wrap():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle = path.open("a", encoding="utf-8")
+        original = sys.stdout
+        handle.write(f"\n===== {datetime.now().isoformat(timespec='seconds')} =====\n")
+
+        class _Tee:
+            def write(self, text: str) -> int:
+                original.write(text)
+                try:
+                    handle.write(text)
+                except Exception:
+                    pass
+                return len(text)
+
+            def flush(self) -> None:
+                original.flush()
+                try:
+                    handle.flush()
+                except Exception:
+                    pass
+
+            def isatty(self) -> bool:
+                return original.isatty()
+
+        sys.stdout = _Tee()  # type: ignore[assignment]
+        try:
+            yield path
+        finally:
+            sys.stdout = original
+            handle.close()
+
+    return _wrap()
+
+
 class HusccError(RuntimeError):
     """Kullaniciya gosterilecek, beklenen hata."""
 

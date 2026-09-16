@@ -217,6 +217,8 @@ def _detail(cfg: Config, name: str) -> dict:
         if (job.work / "browser" / "SORUN.md").exists()
         else "",
         "manual_todo": state.get("manual_todo", []),
+        "published": bool(state.get("video_id")),
+        "video_id": state.get("video_id", ""),
         "analysis_doc": str(job.work / "ANALIZ.md"),
         "work_dir": str(job.work),
     }
@@ -514,6 +516,12 @@ class Handler(BaseHTTPRequestHandler):
                         dry_run=bool(options.get("dry_run", False)),
                         upload_shorts=bool(options.get("upload_shorts", False)),
                         via=options.get("via") or None,
+                        force=bool(options.get("force", False)),
+                    )
+                elif action == "update":
+                    started = RUNNER.start(
+                        f"Meta veri guncelleme: {job.video.name}", pipeline.update, job,
+                        rebuild=bool(options.get("rebuild", False)),
                     )
                 elif action == "publish":
                     started = RUNNER.start(
@@ -526,6 +534,7 @@ class Handler(BaseHTTPRequestHandler):
                         image_source=options.get("image_source") or None,
                         interactive=False,
                         via=options.get("via") or None,
+                        force=bool(options.get("force", False)),
                     )
                 else:
                     self._json({"error": f"bilinmeyen islem: {action}"}, 400)
@@ -535,6 +544,18 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self._json({"ok": bool(started)})
+
+
+def _do_probe(cfg: Config) -> None:
+    from . import studio
+
+    report = publish_browser.probe(cfg)
+    broken = studio.print_probe(report)
+    write_json(cfg.work_dir / "probe" / "rapor.json", report)
+    if broken:
+        print(f"x {broken} secici tutmadi - config/selectors.yaml guncellenmeli")
+    else:
+        print("+ Tum seciciler tuttu.")
 
 
 def _do_auth(cfg: Config) -> None:

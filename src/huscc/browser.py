@@ -118,16 +118,49 @@ class Session:
             )
         except Exception as exc:
             self.stop()
-            raise HusccError(
-                "Chrome baslatilamadi.\n"
-                f"  {exc}\n"
-                "  Chrome kurulu mu? Degilse: winget install --id Google.Chrome -e\n"
-                "  Edge denemek icin: config/channel.yaml > browser.channel: msedge"
-            ) from exc
+            raise self._launch_error(exc) from exc
 
         self._ctx.set_default_timeout(30_000)
         self._page = self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
         return self
+
+    def _launch_error(self, exc: Exception) -> HusccError:
+        """Chrome acilmadiginda gercek nedeni Turkce anlatir."""
+        text = str(exc).lower()
+        locked = (
+            self.is_profile_locked()
+            or "singleton" in text
+            or "already in use" in text
+            or "kullanimda" in text
+        )
+        if locked:
+            return HusccError(
+                "Bu tarayici profili su anda baska bir pencerede acik.\n"
+                f"  Profil: {self.profile_dir}\n"
+                "  HusCC'nin actigi Chrome penceresini kapatip tekrar deneyin.\n"
+                "  ('huscc studio' ile actiysaniz o pencereyi kapatmaniz yeterli.)\n"
+                "  Not: kendi gunluk Chrome'unuz ayri profildedir, ona dokunmayin."
+            )
+        if "executable doesn't exist" in text or "channel" in text:
+            return HusccError(
+                f"{self.channel} bulunamadi.\n"
+                "  Windows: winget install --id Google.Chrome -e\n"
+                "  macOS  : brew install --cask google-chrome\n"
+                "  Edge kullanmak icin: config/channel.yaml > browser.channel: msedge"
+            )
+        return HusccError(
+            "Chrome baslatilamadi.\n"
+            f"  {exc}\n"
+            "  Chrome kurulu mu? Degilse: winget install --id Google.Chrome -e"
+        )
+
+    def is_profile_locked(self) -> bool:
+        """Profil baska bir Chrome penceresi tarafindan tutuluyor mu."""
+        for name in ("SingletonLock", "SingletonCookie", "lockfile"):
+            marker = self.profile_dir / name
+            if marker.exists() or marker.is_symlink():
+                return True
+        return False
 
     def stop(self) -> None:
         for closer in (getattr(self._ctx, "close", None), getattr(self._pw, "stop", None)):

@@ -23,6 +23,9 @@ Sen (Claude) iki isi yapiyorsun:
 | "videolarimi listele" | `huscc list` |
 | "durum" / "ne yayinlandi" | `huscc status` |
 | "Studio'yu ac" | `huscc studio` |
+| "**xx** videosunun basligini/aciklamasini degistir" | `huscc update "xx" --rebuild` |
+| "hepsini paylas" | `huscc publish-all` |
+| "kanal ayarlarini yapalim" | `huscc init` |
 
 **Izin sorma.** Kullanici tarayici, yukleme ve dosya islemleri icin onayi bastan verdi.
 Hata cikarsa dur, Turkce acikla, coz, devam et.
@@ -52,6 +55,21 @@ huscc login               # bir kerelik Google girisi (tarayicida)
 tarafindan yapilir; sen sifre girmeye calisma, beklemeyi komut zaten yonetiyor.
 Giris bitince `secrets/browser-profile/huscc-session.json` yazilir ve
 `huscc doctor` "Google oturumu kayitli" der.
+
+### Girisden hemen sonra: sonda calistir
+
+```bash
+huscc probe
+```
+
+Bu komut **hicbir sey yuklemeden** Studio'yu gezer ve secici haritasindaki her
+anahtarin tutup tutmadigini tek tek raporlar. Ciktida `TUTMADI` goren her anahtar,
+ilk gercek yayinda patlayacak demektir — yayina girmeden once duzelt (Bolum 3).
+
+Kanalda yayinlanmis video varsa `huscc probe` duzenleme sayfasini da dener;
+yoksa `--video <kimlik>` ile bir video verebilirsin. Yeni kanalda yayinlanmis
+video yoksa sonda yalnizca ana sayfa ve yukleme penceresini kontrol eder,
+bu da normaldir.
 
 `secrets/` klasoru `.gitignore`'da. Icine bakma, yazdirma, commit etme.
 
@@ -145,6 +163,7 @@ YouTube arayuzunu degistirdiginde boru hatti **coker gibi gorunur ama cokmez**:
 adim raporlanir, tarayici penceresi acik birakilir.
 
 Su dosyalar olusur:
+* `work/<slug>/log.txt` — o isin tum terminal ciktisi (her komut buraya da yazar)
 * `work/<slug>/browser/SORUN.md` — ne oldu, ne denendi, nasil duzeltilir
 * `work/<slug>/browser/SORUN_<adim>.json` — URL, denenen seciciler, HTML parcasi
 * `work/<slug>/browser/HATA-<adim>.png` — ekran goruntusu
@@ -162,8 +181,10 @@ publish_button:
   - role: "button|Yayınla|Publish"
 ```
 
-3. Komutu tekrar calistir: `huscc upload "xx"`. Boru hatti kaldigi yerden devam eder
-   (video zaten yuklendiyse Studio taslagi korur).
+3. Duzelttigini `huscc probe` ile dogrula (yukleme yapmaz).
+4. Komutu tekrar calistir: `huscc upload "xx"`. Video zaten yuklenmis ve kimligi
+   kaydedilmisse `huscc update "xx"` ile eksik alanlari tamamla — bu, ikinci bir
+   kopya olusturmaz.
 
 Secici yazarken:
 * Once `css`, sonra `role`, en son `text` yaz. `css` en hizli ve kararli olan.
@@ -192,8 +213,8 @@ src/huscc/
   subtitles.py       faster-whisper ile SRT (TR + EN ceviri), Shorts'a gomme
   editor.py          bindirmeler, ses normalizasyonu, outro birlestirme, 9:16 Shorts
   browser.py         Playwright + gercek Chrome, kalici oturum, secici motoru, hata raporu
-  studio.py          YouTube Studio akisi (yukleme, bitis ekrani, sabit yorum, A/B, dogrulama)
-  publish_browser.py on kontroller + oturum + yayin sonrasi orkestrasyonu
+  studio.py          Studio akisi (yukleme, guncelleme, bitis ekrani, sabit yorum, A/B, sonda)
+  publish_browser.py on kontroller + oturum + yayin sonrasi orkestrasyonu + probe
   youtube.py         (opsiyonel) Data API yolu - sadece `--via api` icin
   pipeline.py        prep -> render -> upload orkestrasyonu, durum takibi
   server.py          yerel kontrol paneli (stdlib HTTP, SSE log akisi)
