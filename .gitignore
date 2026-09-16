@@ -1,0 +1,38 @@
+# Gizli kimlik bilgileri - ASLA commit edilmez
+secrets/
+*.client_secret*.json
+client_secret*.json
+token.json
+*.token.json
+.env
+
+# Calisma dosyalari
+work/
+out/
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.uv/
+
+# Medya
+*.mp4
+*.mkv
+*.mov
+*.avi
+*.webm
+*.wav
+*.srt
+!assets/**/*.png
+
+# Sistem
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Uretilen varliklar (bootstrap yeniden uretir)
+assets/overlays/
+.pytest_cache/

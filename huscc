@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Sanal ortami aktiflestirmeden HusCC calistirir:  ./huscc publish "video adi"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+if [ -x "$ROOT/.venv/bin/huscc" ]; then exec "$ROOT/.venv/bin/huscc" "$@"
+elif [ -x "$ROOT/.venv/Scripts/huscc.exe" ]; then exec "$ROOT/.venv/Scripts/huscc.exe" "$@"
+else echo "Sanal ortam yok. Once: python bootstrap.py"; exit 1; fi

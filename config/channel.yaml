@@ -1,0 +1,118 @@
+# =====================================================================
+#  HusCC - Kanal Profili
+#  Bu dosya "kanalin beyni"dir. SEO/CTR kararlari buradan beslenir.
+# =====================================================================
+
+channel:
+  name: "HusCC"
+  handle: "@HusCC"
+  language: "tr"
+  country: "TR"
+  game: "Clash of Clans"
+  # Kanalin ana konumlandirmasi (baslik/aciklama tonunu belirler)
+  positioning: "Turkce Clash of Clans saldiri rehberleri, base incelemeleri ve klan savasi taktikleri"
+  # Izleyici profili
+  audience: "Turkce konusan TH10-TH17 arasi aktif CoC oyunculari"
+  # Sosyal linkler (aciklamaya eklenir; bos birakilabilir)
+  links:
+    discord: ""
+    instagram: ""
+    tiktok: ""
+    twitch: ""
+
+upload:
+  # public | unlisted | private
+  privacy: "public"
+  category_id: "20"          # 20 = Gaming
+  made_for_kids: false
+  default_language: "tr"
+  # Yuklemeden sonra videoyu su oynatma listesine ekle (yoksa olusturulur)
+  auto_playlist: true
+  # Kendi kanalindan ilk yorumu at (sabitleme manuel yapilir)
+  pin_comment: true
+  # Yayin saati: bos ise hemen yayinlanir.
+  # "auto" ise asagidaki en_iyi_saatler listesinden bir sonraki uygun slot secilir.
+  schedule: "auto"
+  best_hours_local: [19, 20, 21, 22]   # TR saati - CoC izleyicisinin pik saatleri
+  timezone: "Europe/Istanbul"
+  # Notify subscribers
+  notify_subscribers: true
+
+seo:
+  # Baslik en fazla 70 karakter tutulur (mobilde kesilmesin)
+  title_max: 70
+  # Aciklamanin ilk 150 karakteri arama sonucunda gorunur -> hook buraya
+  hook_max: 150
+  tag_limit: 40
+  tag_chars_limit: 480
+  hashtags: 3
+  # GEO: ek dil lokalizasyonlari (baslik+aciklama cevirisi yuklenir)
+  localizations: ["en", "ar"]
+  # AEO: aciklamaya "Sikca Sorulan Sorular" blogu eklensin mi
+  faq_block: true
+  # Bolum (chapter) zaman damgalari
+  chapters: true
+
+thumbnail:
+  # Kapak arka plani nereden gelsin?
+  #   auto    : OPENAI_API_KEY varsa ChatGPT gorseli, yoksa video karesi
+  #   api     : her zaman ChatGPT (gpt-image-1) - anahtar sart
+  #   browser : prompt panoya kopyalanir, ChatGPT varsayilan tarayicida acilir,
+  #             indirdigin gorseli work/<slug>/ai/ klasorune birak
+  #   frame   : videodan secilen kare (internet gerekmez)
+  source: "auto"
+  # browser modunda gorselin birakilmasi icin beklenecek sure (saniye)
+  ai_wait_seconds: 420
+  # Bitis karti arka plani da yapay zeka ile uretilsin mi
+  ai_outro: true
+  width: 1280
+  height: 720
+  # Uretilecek varyant sayisi (en iyisi otomatik secilir, digerleri A/B icin saklanir)
+  variants: 3
+  # Ana metin en fazla kac kelime olsun (uzak okunabilirlik)
+  max_words: 4
+  # Marka renkleri
+  palette:
+    primary: "#FFC400"      # CoC altin
+    secondary: "#E63946"    # dikkat kirmizisi
+    dark: "#0B1220"
+    light: "#FFFFFF"
+  # Yuz/aksiyon bolgesine odaklanmis kirpma
+  smart_crop: true
+  # Kose rozeti (TH seviyesi vb.)
+  badge: true
+
+edit:
+  # Sesi -14 LUFS'a normalize et (YouTube standardi)
+  loudnorm: true
+  # Videonun ustune kanal filigrani
+  watermark: true
+  # "ABONE OL" animasyonu (saniye cinsinden konumlar; oran olarak da verilebilir)
+  subscribe_overlay: true
+  subscribe_at: ["8%", "45%", "80%"]
+  subscribe_duration: 5
+  # Sonda 10 sn'lik outro karti (YouTube bitis ekrani icin yer acar)
+  outro: true
+  outro_duration: 10
+  # Shorts uretimi
+  shorts: true
+  shorts_count: 1
+  shorts_max_seconds: 58
+
+subtitles:
+  enabled: true
+  # faster-whisper model: tiny | base | small | medium
+  model: "small"
+  source_language: "tr"
+  # Ek altyazi dilleri (GEO erisimi icin cevrilir)
+  translate_to: ["en"]
+  # Shorts'a altyaziyi goruntuye gom
+  burn_in_shorts: true
+
+paths:
+  # Ekran kayitlarinin bulundugu klasor
+  video_dir: "~/Desktop/CC"
+  # Ara dosyalar
+  work_dir: "./work"
+  # Yayina hazir ciktilar
+  out_dir: "./out"
