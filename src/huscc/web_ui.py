@@ -123,6 +123,13 @@ PAGE = r"""<!DOCTYPE html>
         <label class="opt"><input type="checkbox" id="upload_shorts"> Shorts'u da yukle</label>
         <label class="opt"><input type="checkbox" id="dry_run"> Deneme (yukleme yok)</label>
         <label class="opt"><input type="checkbox" id="skip_edit"> Kurguyu atla</label>
+        <label class="opt">Yayin yolu
+          <select id="via">
+            <option value="">config (varsayilan)</option>
+            <option value="browser">browser (Studio)</option>
+            <option value="api">api</option>
+          </select>
+        </label>
       </div>
       <div class="bar"><i id="bar"></i></div>
     </div>
@@ -134,6 +141,7 @@ PAGE = r"""<!DOCTYPE html>
         <div class="tab" data-t="thumb" onclick="tab('thumb')">Kapak</div>
         <div class="tab" data-t="meta" onclick="tab('meta')">Meta Veri</div>
         <div class="tab" data-t="frames" onclick="tab('frames')">Kareler</div>
+        <div class="tab" data-t="shots" onclick="tab('shots')">Tarayici</div>
         <div class="tab" data-t="setup" onclick="tab('setup')">Kurulum</div>
       </div>
 
@@ -186,10 +194,21 @@ PAGE = r"""<!DOCTYPE html>
         <div class="grid" id="frames"></div>
       </div>
 
+      <div class="pane" id="pane-shots" hidden>
+        <div id="issueBox"></div>
+        <div class="grid" id="shots"></div>
+      </div>
+
       <div class="pane" id="pane-setup" hidden>
         <div class="row" style="margin-bottom:10px">
-          <button onclick="run('auth')">YouTube'a baglan</button>
+          <button class="primary" onclick="run('login')">Google'a giris yap (tarayici)</button>
           <button class="ghost" onclick="run('doctor')">Sistem kontrolu</button>
+          <button class="ghost" onclick="run('auth')">API yolu icin yetkilendir</button>
+        </div>
+        <div class="hint" style="margin-bottom:10px">
+          Varsayilan yol <b>tarayici</b>: HusCC gercek Chrome'u acar, YouTube Studio'ya
+          girer ve yuklemeyi orada yapar. API anahtari, Google Cloud projesi gerekmez.
+          Bir kez giris yapman yeterli; oturum saklanir.
         </div>
         <pre id="setupHelp" class="hint"></pre>
       </div>
@@ -213,12 +232,13 @@ async function refresh(){
   BOOT = await api('/api/bootstrap');
   const d = BOOT.doctor || {};
   el('channelLine').textContent =
-    (BOOT.channel?.name||'HusCC') + ' · ' + (d.channel_title || 'kanal bagli degil');
+    (BOOT.channel?.name||'HusCC') + ' · ' +
+    (d.profile_ready ? 'tarayici oturumu hazir' : 'once Google girisi gerekiyor');
   el('chips').innerHTML = [
     chip('ffmpeg', d.ffmpeg), chip('altyazi', d.whisper),
-    chip('oauth', d.oauth_client), chip('yetki', d.authorized),
-    chip('api anahtari', d.api_key)
-  ].join('');
+    chip('playwright', d.playwright), chip(d.browser_channel||'chrome', d.browser),
+    chip('oturum', d.profile_ready), chip('gorsel api', d.api_key)
+  ].join('') + `<span class="chip">yol: ${d.via||'browser'}</span>`;
   el('setupHelp').textContent = d.setup_help || '';
   drawVideos(BOOT.videos || []);
   drawHistory(BOOT.history || []);
@@ -263,7 +283,7 @@ async function select(name){
   DETAIL = await api('/api/detail/' + encodeURIComponent(name));
   if(DETAIL.error){ el('selName').textContent = DETAIL.error; return }
   el('briefBox').value = JSON.stringify(DETAIL.brief || DETAIL.draft || {}, null, 2);
-  drawThumbs(); drawMeta(); drawFrames(); drawAi();
+  drawThumbs(); drawMeta(); drawFrames(); drawAi(); drawShots();
 }
 
 async function aiOpen(){
@@ -317,6 +337,25 @@ function drawFrames(){
     <figcaption class="hint">${f}</figcaption></figure>`).join('');
 }
 
+function drawShots(){
+  const host = el('shots');
+  const issue = el('issueBox');
+  if(!DETAIL){ host.innerHTML=''; issue.innerHTML=''; return }
+  issue.innerHTML = DETAIL.browser_issue
+    ? `<pre style="border-color:#5a2026">${esc(DETAIL.browser_issue)}</pre>` : '';
+  const todo = DETAIL.manual_todo || [];
+  if(todo.length){
+    issue.innerHTML += '<div class="card" style="background:var(--panel-2);margin-bottom:12px">'
+      + '<h2>Elle yapilacaklar</h2>'
+      + todo.map(t=>`<div>• ${esc(t)}</div>`).join('') + '</div>';
+  }
+  host.innerHTML = (DETAIL.shots||[]).length
+    ? DETAIL.shots.map(f=>`<figure style="margin:0">
+        <img src="/media/shot/${DETAIL.slug}/${f}?t=${Date.now()}">
+        <figcaption class="hint">${f}</figcaption></figure>`).join('')
+    : '<div class="empty">Henuz tarayici adimi calismadi.</div>';
+}
+
 function drawMeta(){
   const m = DETAIL?.metadata || {};
   if(!m.title){ el('metaBox').innerHTML = '<div class="empty">Meta veri yok. "Kurgu + Kapak" calistirin.</div>'; return }
@@ -364,13 +403,14 @@ function opts(){
     upload_shorts: el('upload_shorts').checked,
     dry_run: el('dry_run').checked,
     image_source: el('image_source').value,
+    via: el('via').value,
     skip_edit: el('skip_edit').checked
   };
 }
 
 async function run(action){
   if(BUSY){ alert('Zaten calisan bir is var.'); return }
-  if(!SEL && !['auth','doctor'].includes(action)){ alert('Once bir video secin.'); return }
+  if(!SEL && !['auth','doctor','login'].includes(action)){ alert('Once bir video secin.'); return }
   tab('log');
   el('log').textContent = '';
   const r = await api('/api/run', {method:'POST', headers:{'Content-Type':'application/json'},

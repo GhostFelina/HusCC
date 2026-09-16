@@ -74,6 +74,33 @@ def install_deps(with_whisper: bool) -> None:
     say("+", "Bagimliliklar kuruldu.")
 
 
+def ensure_chrome() -> None:
+    """Tarayici yolu icin Chrome gerekiyor."""
+    candidates = [
+        Path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
+        Path("C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"),
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Google/Chrome/Application/chrome.exe",
+        Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+        Path("/usr/bin/google-chrome"),
+        Path("/usr/bin/google-chrome-stable"),
+    ]
+    if any(c.exists() for c in candidates if str(c)) or have("google-chrome"):
+        say("+", "Chrome bulundu.")
+        return
+
+    system = platform.system()
+    say("!", "Chrome bulunamadi, kuruluyor...")
+    if system == "Windows" and have("winget"):
+        run(["winget", "install", "--id", "Google.Chrome", "-e",
+             "--accept-package-agreements", "--accept-source-agreements",
+             "--disable-interactivity"], check=False)
+    elif system == "Darwin" and have("brew"):
+        run(["brew", "install", "--cask", "google-chrome"], check=False)
+    else:
+        say("!", "Chrome'u elle kurun: https://www.google.com/chrome/")
+        say("!", "Edge kullanmak icin: config/channel.yaml > browser.channel: msedge")
+
+
 def ensure_ffmpeg() -> None:
     if have("ffmpeg"):
         say("+", "ffmpeg bulundu.")
@@ -110,6 +137,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="HusCC kurulumu")
     parser.add_argument("--no-whisper", action="store_true", help="Altyazi motorunu kurma")
     parser.add_argument("--no-ffmpeg", action="store_true", help="ffmpeg kurulumunu atla")
+    parser.add_argument("--no-chrome", action="store_true", help="Chrome kurulumunu atla")
     args = parser.parse_args()
 
     print()
@@ -125,6 +153,8 @@ def main() -> int:
     install_deps(not args.no_whisper)
     if not args.no_ffmpeg:
         ensure_ffmpeg()
+    if not args.no_chrome:
+        ensure_chrome()
     ensure_dirs()
 
     huscc = venv_bin() / ("huscc.exe" if IS_WIN else "huscc")
@@ -133,11 +163,12 @@ def main() -> int:
     say("+", "Kurulum tamam.")
     print()
     print("  Siradaki adimlar:")
-    print(f"    1. {huscc} doctor")
-    print("    2. Google OAuth istemci dosyasini secrets/client_secret.json olarak koy")
-    print(f"    3. {huscc} auth")
-    print(f"    4. {huscc} web          (yerel panel)")
-    print(f'    5. {huscc} publish "video adi"')
+    print(f"    1. {huscc} doctor           (kurulum kontrolu)")
+    print(f"    2. {huscc} login            (bir kerelik Google girisi - tarayicida)")
+    print(f'    3. {huscc} publish "video adi"')
+    print()
+    print(f"  Yerel panel istersen: {huscc} web")
+    print("  API anahtari, Google Cloud projesi gerekmiyor.")
     print("=" * 62)
     return 0
 

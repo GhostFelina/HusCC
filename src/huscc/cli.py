@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from . import brief as brief_mod
-from . import media, pipeline, subtitles, thumbnail, youtube
+from . import media, pipeline, publish_browser, subtitles, thumbnail, youtube
 from .config import Config, load_config
 from .discover import list_videos
 from .util import HusccError, err, human_size, info, ok, step, warn
@@ -71,29 +71,65 @@ def cmd_doctor(args) -> int:
     else:
         warn("faster-whisper yok - altyazi uretilmez (uv pip install faster-whisper)")
 
+    # --- yayin yolu: tarayici -------------------------------------------
+    route = str(cfg.get("upload.via", "browser")).lower()
+    print(f"  Yayin yolu      : {route}")
+
+    try:
+        import playwright  # noqa: F401
+
+        ok("Playwright kurulu")
+    except ImportError:
+        problems.append("Playwright yok -> uv pip install --python .venv playwright")
+        err("Playwright yok")
+
+    channel_name = str(cfg.get("browser.channel", "chrome"))
+    browser_path = _find_browser(channel_name)
+    if browser_path:
+        ok(f"Tarayici: {channel_name} ({browser_path})")
+    else:
+        problems.append(
+            f"{channel_name} bulunamadi -> winget install --id Google.Chrome -e"
+        )
+        err(f"{channel_name} bulunamadi")
+
+    if cfg.selectors_path.exists():
+        ok(f"Element haritasi: {cfg.selectors_path.name}")
+    else:
+        problems.append("config/selectors.yaml yok")
+        err("config/selectors.yaml yok")
+
+    if publish_browser.is_logged_in(cfg):
+        detail = publish_browser.session_info(cfg)
+        channel_title = detail.get("channel") or "YouTube"
+        ok(f"Google oturumu kayitli: {channel_title}")
+    else:
+        warn("Henuz Google girisi yapilmamis -> huscc login")
+
+    if args.browser:
+        info("Tarayici acilip oturum deneniyor...")
+        try:
+            title = publish_browser.login(cfg)
+            ok(f"Oturum dogrulandi: {title or 'YouTube Studio'}")
+        except HusccError as exc:
+            problems.append(f"Oturum dogrulanamadi: {exc}")
+            err(str(exc))
+
+    # --- opsiyonel: API yolu --------------------------------------------
     secret = youtube.client_secret_path(cfg.secrets_dir)
     if secret:
-        ok(f"OAuth istemcisi: {secret.name}")
-    else:
-        problems.append("OAuth istemci dosyasi yok")
+        ok(f"OAuth istemcisi (API yolu): {secret.name}")
+    elif route == "api":
+        problems.append("API yolu secili ama OAuth istemci dosyasi yok")
         err("OAuth istemci dosyasi yok")
         print(youtube.setup_help(cfg.secrets_dir))
-
-    token = cfg.secrets_dir / youtube.TOKEN_NAME
-    if token.exists():
-        try:
-            service = youtube.authorize(cfg.secrets_dir)
-            channel = youtube.channel_info(service)
-            ok(f"YouTube baglantisi: {channel['title']} ({channel['subscribers']} abone)")
-        except HusccError as exc:
-            warn(f"Token var ama dogrulanamadi: {exc}")
     else:
-        warn("Henuz yetkilendirme yok -> huscc auth")
+        info("API yolu kurulu degil (gerekmiyor - tarayici yolu kullaniliyor)")
 
-    if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY"):
-        ok("Gorsel analiz API anahtari bulundu (--brain api kullanilabilir)")
+    if os.environ.get("OPENAI_API_KEY"):
+        ok("OPENAI_API_KEY bulundu - kapak gorseli otomatik uretilir")
     else:
-        info("API anahtari yok - varsayilan beyin: claude-code")
+        info("OPENAI_API_KEY yok - kapak icin --image-source browser ya da frame")
 
     print()
     if problems:
@@ -102,6 +138,71 @@ def cmd_doctor(args) -> int:
             print(f"    - {problem}")
         return 1
     ok("Her sey hazir. Kullanim:  huscc publish \"video adi\"")
+    return 0
+
+
+_BROWSER_PATHS = {
+    "chrome": [
+        "C:/Program Files/Google/Chrome/Application/chrome.exe",
+        "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+    ],
+    "msedge": [
+        "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+        "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        "/usr/bin/microsoft-edge",
+    ],
+}
+
+
+def _find_browser(channel: str) -> str:
+    """Kurulu tarayicinin yolunu bulur (yoksa bos dize)."""
+    import os as _os
+
+    for candidate in _BROWSER_PATHS.get(channel, []):
+        expanded = _os.path.expandvars(candidate)
+        if Path(expanded).exists():
+            return expanded
+    local = _os.environ.get("LOCALAPPDATA", "")
+    if local and channel == "chrome":
+        candidate = Path(local) / "Google/Chrome/Application/chrome.exe"
+        if candidate.exists():
+            return str(candidate)
+    return ""
+
+
+def cmd_login(args) -> int:
+    """Bir kerelik Google girisi - oturum kalici profile yazilir."""
+    cfg = _cfg(args)
+    if args.reset:
+        import shutil
+
+        shutil.rmtree(cfg.browser_profile_dir, ignore_errors=True)
+        info("Mevcut tarayici profili silindi.")
+    title = publish_browser.login(cfg)
+    ok(f"Giris tamam: {title or 'YouTube Studio'}")
+    print("  Artik 'huscc publish \"video adi\"' calistirabilirsiniz.")
+    return 0
+
+
+def cmd_studio(args) -> int:
+    """Studio'yu HusCC tarayicisinda acar ve acik birakir."""
+    cfg = _cfg(args)
+    session = publish_browser.open_session(cfg, cfg.work_dir / "studio")
+    session.start()
+    session.ensure_signed_in(timeout=float(cfg.get("browser.login_timeout", 900)))
+    target = args.url or "https://studio.youtube.com/"
+    session.goto(target)
+    ok(f"Acildi: {target}")
+    print("  Pencere acik kalacak. Kapatmak icin Enter'a basin.")
+    try:
+        input()
+    except (EOFError, KeyboardInterrupt):
+        pass
+    session.stop()
     return 0
 
 
@@ -213,7 +314,7 @@ def cmd_render(args) -> int:
 def cmd_upload(args) -> int:
     cfg = _cfg(args)
     job = pipeline.make_job(cfg, args.name)
-    pipeline.upload(job, dry_run=args.dry_run, upload_shorts=args.shorts)
+    pipeline.upload(job, dry_run=args.dry_run, upload_shorts=args.shorts, via=args.via)
     return 0
 
 
@@ -228,6 +329,7 @@ def cmd_publish(args) -> int:
         upload_shorts=args.shorts,
         frame_count=args.frames,
         image_source=args.image_source,
+        via=args.via,
     )
     return 0
 
@@ -286,7 +388,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", help="Alternatif channel.yaml yolu")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("doctor", help="Kurulumu ve baglantilari kontrol et").set_defaults(func=cmd_doctor)
+    doctor = sub.add_parser("doctor", help="Kurulumu ve baglantilari kontrol et")
+    doctor.add_argument("--browser", action="store_true",
+                        help="Tarayiciyi acip YouTube oturumunu da dogrula")
+    doctor.set_defaults(func=cmd_doctor)
+
+    login = sub.add_parser("login", help="Google girisi (bir kerelik, tarayicida)")
+    login.add_argument("--reset", action="store_true", help="Kayitli oturumu sil, bastan gir")
+    login.set_defaults(func=cmd_login)
+
+    studio = sub.add_parser("studio", help="YouTube Studio'yu HusCC tarayicisinda ac")
+    studio.add_argument("--url", help="Acilacak adres (varsayilan: Studio ana sayfasi)")
+    studio.set_defaults(func=cmd_studio)
 
     auth = sub.add_parser("auth", help="YouTube hesabini yetkilendir")
     auth.add_argument("--force", action="store_true", help="Mevcut token'i sil, bastan giris yap")
@@ -321,6 +434,8 @@ def build_parser() -> argparse.ArgumentParser:
     upload.add_argument("name")
     upload.add_argument("--dry-run", action="store_true", help="Yuklemeden onizle")
     upload.add_argument("--shorts", action="store_true", help="Shorts'lari da yukle")
+    upload.add_argument("--via", choices=["browser", "api"],
+                        help="Yayin yolu (varsayilan: config > upload.via)")
     upload.set_defaults(func=cmd_upload)
 
     publish = sub.add_parser("publish", help="Bastan sona: analiz -> kurgu -> yayin")
@@ -332,6 +447,8 @@ def build_parser() -> argparse.ArgumentParser:
     publish.add_argument("--shorts", action="store_true")
     publish.add_argument("--image-source", choices=["auto", "api", "browser", "frame"],
                          help="Kapak arka plani: ChatGPT API / tarayici / video karesi")
+    publish.add_argument("--via", choices=["browser", "api"],
+                         help="Yayin yolu (varsayilan: config > upload.via)")
     publish.set_defaults(func=cmd_publish)
 
     status = sub.add_parser("status", help="Durum / yayin gecmisi")

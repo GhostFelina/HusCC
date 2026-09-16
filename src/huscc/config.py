@@ -74,6 +74,18 @@ class Config:
         return ensure_dir(self.root / "assets")
 
     @property
+    def selectors_path(self) -> Path:
+        return self.root / "config" / "selectors.yaml"
+
+    @property
+    def browser_profile_dir(self) -> Path:
+        raw = self.get("browser.profile_dir", "./secrets/browser-profile")
+        path = Path(str(raw)).expanduser()
+        if not path.is_absolute():
+            path = self.root / path
+        return ensure_dir(path.resolve())
+
+    @property
     def history_file(self) -> Path:
         return self.work_dir / "history.json"
 

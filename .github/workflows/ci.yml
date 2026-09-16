@@ -29,3 +29,6 @@ jobs:
         run: |
           pip install pytest
           pytest -q
+
+      - name: Secici haritasi gecerli mi
+        run: python -c "import yaml,sys; d=yaml.safe_load(open('config/selectors.yaml',encoding='utf-8')); print(len(d),'secici'); sys.exit(0 if len(d)>30 else 1)"

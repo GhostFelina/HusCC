@@ -2,17 +2,33 @@
 
 Masaüstündeki **CC** klasörüne attığın Clash of Clans ekran kaydını tek komutla
 YouTube'a yayınlayan otomasyon. Videoyu analiz eder, kapağı üretir, altyazıyı
-çıkarır, SEO/GEO/AEO/CTR açısından paketler, kurgular ve yükler.
+çıkarır, SEO/GEO/AEO/CTR açısından paketler, kurgular ve **gerçek tarayıcıda
+YouTube Studio'ya girip yayınlar**.
 
 ```bash
 huscc publish "th16 root rider savaşı"
 ```
 
-Ya da tarayıcıdan:
+**API anahtarı yok, Google Cloud projesi yok, OAuth kurulumu yok.** Bir kez
+Google girişi yaparsın, oturum kalır.
 
-```bash
-huscc web        # http://127.0.0.1:8765
-```
+---
+
+## Neden tarayıcı, neden API değil
+
+YouTube Data API bazı şeyleri hiç yapamaz. Studio üzerinden hepsi yapılabiliyor:
+
+| | Data API | HusCC (tarayıcı) |
+|---|---|---|
+| Video yükleme, başlık, açıklama, etiket | ✅ | ✅ |
+| Kapak, oynatma listesi, altyazı | ✅ | ✅ |
+| **Bitiş ekranı ve kartlar** | ❌ | ✅ |
+| **İlk yorumu sabitleme** | ❌ | ✅ |
+| **Küçük resim A/B testi (Test & Compare)** | ❌ | ✅ |
+| Kurulum | Cloud projesi + OAuth + onay ekranı | Bir kez Google girişi |
+| Günlük sınır | ~6 video (kota) | Kanalın normal yükleme sınırı |
+
+API yolu yine duruyor: `--via api` ya da `config/channel.yaml > upload.via: api`.
 
 ---
 
@@ -20,66 +36,41 @@ huscc web        # http://127.0.0.1:8765
 
 | Aşama | İçerik |
 |---|---|
-| **Analiz** | Teknik bilgi (süre, çözünürlük, ses), sahne kesimi tespiti, hareket profili, 14 anahtar kare, `faster-whisper` ile Türkçe altyazı + İngilizce çeviri |
-| **Brief** | Videoda ne olduğunun yapılandırılmış kararı: TH seviyesi, kullanılan ordu, sonuç, öne çıkan anlar, başlık adayları, kapak metni. Claude kareleri okuyarak yazar; API veya kural tabanlı üretim de var |
-| **SEO** | Anahtar kelime havuzu (CoC'a özel Türkçe + İngilizce), etiketler (500 karakter sınırı içinde), açıklamanın ilk 150 karakterine yerleşen kanca |
-| **CTR** | 3 başlık adayı puanlanır (uzunluk, anahtar kelimenin konumu, merak kancası, sayı, güçlü kelime, spam sinyalleri) ve en iyisi seçilir |
-| **AEO** | Açıklamaya "Sıkça Sorulan Sorular" bloğu — üretken arama motorlarının doğrudan alıntılayabileceği net cevaplar |
-| **GEO** | Yapılandırılmış İngilizce başlık/açıklama lokalizasyonu + İngilizce altyazı |
-| **Kapak** | ChatGPT (`gpt-image-1`) ile üretilen arka plan + 3 farklı tipografi şablonu; en okunaklı olan otomatik seçilir, hepsi A/B için saklanır |
-| **Kurgu** | Ses normalizasyonu (-14 LUFS), "ABONE OL" animasyonu, kanal filigranı, 10 sn bitiş kartı, dikey Shorts (yakılmış altyazıyla) |
-| **Yayın** | Yükleme, kapak, TR + EN altyazı, lokalizasyon, oynatma listesi (yoksa oluşturur), ilk yorum, planlı yayın saati |
+| **Analiz** | Teknik bilgi, sahne kesimi tespiti, hareket profili, 14 anahtar kare, `faster-whisper` ile Türkçe altyazı + İngilizce çeviri |
+| **Brief** | Videoda ne olduğunun yapılandırılmış kararı: TH seviyesi, ordu, sonuç, öne çıkan anlar, başlık adayları, kapak metni. Claude kareleri okuyarak yazar |
+| **SEO** | CoC'a özel TR+EN anahtar kelime havuzu, 500 karakter sınırında etiketler, açıklamanın ilk 150 karakterine yerleşen kanca |
+| **CTR** | 3 başlık adayı puanlanır (uzunluk, anahtar kelimenin konumu, merak kancası, sayı, güçlü kelime, spam sinyalleri) |
+| **AEO** | Açıklamada "Sıkça Sorulan Sorular" — üretken arama motorlarının alıntılayabileceği net cevaplar |
+| **GEO** | Yapılandırılmış İngilizce lokalizasyon + İngilizce altyazı |
+| **Kapak** | ChatGPT (`gpt-image-1`) arka planı + 3 tipografi şablonu; en okunaklı olan seçilir, hepsi A/B için saklanır |
+| **Kurgu** | Ses normalizasyonu (−14 LUFS), "ABONE OL" animasyonu, filigran, 10 sn bitiş kartı, altyazısı gömülü dikey Shorts |
+| **Yayın** | Studio'da tam akış + bitiş ekranı + sabit yorum + doğrulama |
 
 ---
 
 ## Kurulum
 
 ```bash
-git clone https://github.com/<kullanıcı>/HusCC.git
+git clone https://github.com/GhostFelina/HusCC.git
 cd HusCC
-python bootstrap.py
+python bootstrap.py       # sanal ortam, bağımlılıklar, ffmpeg, Chrome
+huscc doctor              # eksik var mı
+huscc login               # bir kerelik Google girişi
 ```
 
-`bootstrap.py`: sanal ortamı kurar, bağımlılıkları yükler, ffmpeg'i kurar,
-`~/Desktop/CC` klasörünü açar.
+`huscc login` görünür bir Chrome penceresi açar; girişi sen yaparsın. Oturum
+`secrets/browser-profile/` içinde saklanır, bir daha sorulmaz.
 
-Sonra:
+### Görsel üretimi (opsiyonel)
 
-```bash
-.venv/Scripts/huscc doctor      # Windows
-.venv/bin/huscc doctor          # macOS / Linux
-```
+`.env` dosyasına `OPENAI_API_KEY=sk-...` koyarsan kapak arka planı otomatik üretilir.
+Koymazsan:
 
-### YouTube yetkilendirmesi (tek seferlik)
+* `--image-source browser` → prompt panoya kopyalanır, varsayılan tarayıcıda ChatGPT
+  açılır, ürettiğin görseli `work/<slug>/ai/` klasörüne bırakırsın
+* `--image-source frame` → videodan seçilen kare (internet gerekmez)
 
-`huscc doctor` eksikleri sayar. Tek elle yapılacak iş Google OAuth istemcisi:
-
-1. [console.cloud.google.com](https://console.cloud.google.com/projectcreate) → yeni proje
-2. **YouTube Data API v3** → ENABLE
-3. **OAuth consent screen** → External → test kullanıcılarına kanal sahibi hesabı ekle
-4. **Credentials → OAuth client ID → Desktop app** → JSON indir
-5. Dosyayı `secrets/client_secret.json` olarak koy
-6. `huscc auth`
-
-`secrets/` klasörü `.gitignore` içinde; hiçbir anahtar depoya girmez.
-
-### Görsel üretimi (opsiyonel ama önerilen)
-
-`.env` dosyasına:
-
-```
-OPENAI_API_KEY=sk-...
-```
-
-Anahtar varsa kapak arka planı ChatGPT ile üretilir. Anahtar yoksa:
-
-* `huscc render "video" --image-source browser` → prompt panoya kopyalanır,
-  **varsayılan tarayıcıda** ChatGPT açılır, ürettiğin görseli `work/<slug>/ai/`
-  klasörüne bırakırsın, CLI onu alır.
-* `--image-source frame` → videodan seçilen kare kullanılır (internet gerekmez).
-
-Kapak yazısı her zaman yerel olarak basılır; görsel modelleri Türkçe tipografide
-(ı, ş, ğ) güvenilir değil.
+Kapak yazısı her zaman yerel basılır; görsel modelleri Türkçe tipografide güvenilir değil.
 
 ---
 
@@ -94,57 +85,82 @@ huscc publish "son"                  # en yeni kayıt
 huscc prep    "video adı"            # analiz + kareler + altyazı
 huscc brief   "video adı" --show     # brief'i gör / doğrula
 huscc render  "video adı"            # kapak + meta veri + kurgu
-huscc upload  "video adı" --dry-run  # yüklemeden önizle
-huscc upload  "video adı"            # yayınla
+huscc upload  "video adı" --dry-run  # ön kontroller + önizleme
+huscc upload  "video adı"            # Studio'da yayınla
 
-huscc web                            # yerel panel
+huscc login                          # Google girişi
+huscc studio                         # Studio'yu HusCC tarayıcısında aç
+huscc web                            # yerel panel (127.0.0.1:8765)
 huscc status                         # yayın geçmişi
-huscc clean "video adı"              # ara dosyaları sil
+huscc doctor --browser               # oturumu da doğrulayarak kontrol
 ```
 
 İsim eşleştirme esnek: tam ad, ad parçası, `son`, hatta
 `"kızılay saldırısı isimli videomu paylaş"` çalışır.
 
-### Yerel panel
+---
 
-`huscc web` → `http://127.0.0.1:8765`
+## YouTube arayüzü değişirse
 
-Video listesi, tek tıkla tüm aşamalar, canlı log akışı, brief düzenleyici,
-kapak varyantı seçimi, ChatGPT prompt'u + sürükle-bırak görsel yükleme,
-meta veri önizlemesi, kare galerisi. Sunucu yalnızca `127.0.0.1` dinler.
+Kodda tek bir CSS seçici yok; hepsi [`config/selectors.yaml`](config/selectors.yaml) içinde.
+Bir adım tıkanırsa süreç çökmez:
+
+* `work/<slug>/browser/SORUN.md` — ne oldu, ne denendi, nasıl düzeltilir
+* `work/<slug>/browser/HATA-<adım>.png` — o andaki ekran görüntüsü
+* Tarayıcı penceresi **açık bırakılır**, elle tamamlayabilirsin
+
+Düzeltmek için doğru seçiciyi ilgili anahtarın başına eklemen yeterli:
+
+```yaml
+publish_button:
+  - css: "<yeni seçici>"
+  - css: "ytcp-button#done-button"
+  - role: "button|Yayınla|Publish"
+```
+
+Metin tabanlı seçiciler hem Türkçe hem İngilizce arayüzü kapsar.
 
 ---
 
 ## Yapılandırma
 
-Her şey [`config/channel.yaml`](config/channel.yaml) içinde: kanal kimliği,
-gizlilik, yayın saati, etiket sınırları, kapak paleti, kurgu tercihleri,
-altyazı modeli, klasör yolları.
-
-Öne çıkanlar:
+Her şey [`config/channel.yaml`](config/channel.yaml) içinde:
 
 ```yaml
 upload:
+  via: "browser"                    # browser | api
   privacy: "public"
-  schedule: "auto"                  # bir sonraki uygun prime-time slotu
+  schedule: "auto"                  # bir sonraki prime-time slotu
   best_hours_local: [19, 20, 21, 22]
+  end_screen: true                  # bitiş ekranını uygula
+  pin_first_comment: true           # ilk yorumu at ve sabitle
+  verify_after: true                # yayından sonra videoyu aç ve doğrula
 thumbnail:
   source: "auto"                    # auto | api | browser | frame
-  variants: 3
-edit:
-  subscribe_at: ["8%", "45%", "80%"]
-  shorts: true
+browser:
+  channel: "chrome"                 # chrome | msedge
+  headless: false                   # pencere görünür olsun
+  keep_open_on_error: true          # hata halinde açık bırak
 ```
+
+---
+
+## Yerel panel
+
+`huscc web` → `http://127.0.0.1:8765`
+
+Video listesi, tek tıkla tüm aşamalar, canlı log akışı, brief düzenleyici, kapak
+varyantı seçimi, ChatGPT prompt'u + sürükle-bırak görsel yükleme, meta veri
+önizlemesi, kare galerisi, tarayıcı adımlarının ekran görüntüleri.
+Sunucu yalnızca `127.0.0.1` dinler.
 
 ---
 
 ## Sınırlar
 
-* **Kota**: bir yükleme ~1600 birim, günlük varsayılan 10.000 → günde ~6 video.
-* **Bitiş ekranı ve kart**: YouTube API desteklemiyor. Video, bitiş kartıyla
-  birlikte yükleniyor; öğeleri Studio'dan eklemen gerekiyor.
-* **Yorum sabitleme**: API desteklemiyor; ilk yorum atılıyor, sabitlemeyi
-  Studio'dan yapıyorsun.
+* Kanalın normal yükleme sınırları geçerli (yeni kanallarda günde birkaç video).
+* Google, tanımadığı cihazda ek doğrulama isteyebilir — giriş penceresi görünür
+  olduğu için doğrulamayı sen yaparsın, sonra oturum kalıcı olur.
 * İlk `faster-whisper` çalıştırmasında model indirilir (~500 MB, `small`).
 
 ---

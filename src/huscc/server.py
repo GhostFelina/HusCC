@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from . import brief as brief_mod
-from . import imagegen, media, pipeline, subtitles, thumbnail, youtube
+from . import imagegen, media, pipeline, publish_browser, subtitles, thumbnail, youtube
 from .config import Config, load_config
 from .discover import list_videos
 from .util import HusccError, human_size, read_json, slugify, write_json
@@ -146,24 +146,43 @@ def _video_rows(cfg: Config) -> list[dict]:
     return rows
 
 
-def _doctor(cfg: Config) -> dict:
-    token = cfg.secrets_dir / youtube.TOKEN_NAME
-    channel_title = ""
-    if token.exists():
-        try:
-            channel_title = youtube.channel_info(youtube.authorize(cfg.secrets_dir))["title"]
-        except Exception:
-            channel_title = ""
+def _browser_ready(cfg: Config) -> dict:
+    """Tarayici yolunun hazir olup olmadigini (tarayici acmadan) anlar."""
+    try:
+        import playwright  # noqa: F401
+
+        have_playwright = True
+    except ImportError:
+        have_playwright = False
+
+    from .cli import _find_browser
+
+    channel = str(cfg.get("browser.channel", "chrome"))
+    browser_path = _find_browser(channel)
+    logged_in = publish_browser.is_logged_in(cfg)
     return {
+        "playwright": have_playwright,
+        "browser": bool(browser_path),
+        "browser_path": browser_path,
+        "browser_channel": channel,
+        "selectors": cfg.selectors_path.exists(),
+        "profile_ready": bool(logged_in),
+        "session": publish_browser.session_info(cfg),
+    }
+
+
+def _doctor(cfg: Config) -> dict:
+    browser = _browser_ready(cfg)
+    return {
+        "via": str(cfg.get("upload.via", "browser")),
         "ffmpeg": media.have_ffmpeg(),
         "whisper": subtitles.available(),
         "oauth_client": youtube.client_secret_path(cfg.secrets_dir) is not None,
-        "authorized": bool(channel_title),
-        "channel_title": channel_title,
-        "api_key": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")),
+        "api_key": bool(os.environ.get("OPENAI_API_KEY")),
         "video_dir": str(cfg.video_dir),
         "out_dir": str(cfg.out_dir),
         "setup_help": youtube.setup_help(cfg.secrets_dir),
+        **browser,
     }
 
 
@@ -191,6 +210,13 @@ def _detail(cfg: Config, name: str) -> dict:
         "ai_dir": str(job.work / "ai"),
         "ai_image": bool((job.work / "ai" / "thumb_ai.png").exists()),
         "thumb_source": state.get("thumbnail_source", ""),
+        "shots": sorted(p.name for p in (job.work / "browser").glob("*.png"))
+        if (job.work / "browser").exists()
+        else [],
+        "browser_issue": (job.work / "browser" / "SORUN.md").read_text(encoding="utf-8")
+        if (job.work / "browser" / "SORUN.md").exists()
+        else "",
+        "manual_todo": state.get("manual_todo", []),
         "analysis_doc": str(job.work / "ANALIZ.md"),
         "work_dir": str(job.work),
     }
@@ -309,6 +335,8 @@ class Handler(BaseHTTPRequestHandler):
             target = cfg.work_dir / slug / "thumbs" / parts[2]
         elif kind == "frame" and len(parts) >= 3:
             target = cfg.work_dir / slug / "frames" / parts[2]
+        elif kind == "shot" and len(parts) >= 3:
+            target = cfg.work_dir / slug / "browser" / parts[2]
         elif kind == "video":
             target = cfg.out_dir / f"{slug}.mp4"
         elif kind == "short" and len(parts) >= 3:
@@ -452,8 +480,10 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         try:
-            if action == "auth":
-                started = RUNNER.start("YouTube yetkilendirme", _do_auth, cfg)
+            if action == "login":
+                started = RUNNER.start("Google girisi (tarayici)", publish_browser.login, cfg)
+            elif action == "auth":
+                started = RUNNER.start("YouTube yetkilendirme (API)", _do_auth, cfg)
             elif action == "doctor":
                 from .cli import cmd_doctor
 
@@ -483,6 +513,7 @@ class Handler(BaseHTTPRequestHandler):
                         f"Yukleme: {job.video.name}", pipeline.upload, job,
                         dry_run=bool(options.get("dry_run", False)),
                         upload_shorts=bool(options.get("upload_shorts", False)),
+                        via=options.get("via") or None,
                     )
                 elif action == "publish":
                     started = RUNNER.start(
@@ -494,6 +525,7 @@ class Handler(BaseHTTPRequestHandler):
                         frame_count=int(options.get("frames", 14)),
                         image_source=options.get("image_source") or None,
                         interactive=False,
+                        via=options.get("via") or None,
                     )
                 else:
                     self._json({"error": f"bilinmeyen islem: {action}"}, 400)

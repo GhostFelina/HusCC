@@ -9,7 +9,7 @@ from typing import Any
 from PIL import Image, ImageDraw
 
 from . import brief as brief_mod
-from . import editor, imagegen, media, seo, subtitles, thumbnail, youtube
+from . import editor, imagegen, media, publish_browser, seo, subtitles, thumbnail, youtube
 from .config import Config
 from .discover import VideoFile, find_video
 from .util import (
@@ -423,7 +423,14 @@ def _render_shorts(
 
 
 # ----------------------------------------------------------------- 3. upload
-def upload(job: Job, *, dry_run: bool = False, upload_shorts: bool = False) -> dict:
+def upload(
+    job: Job,
+    *,
+    dry_run: bool = False,
+    upload_shorts: bool = False,
+    via: str | None = None,
+) -> dict:
+    """Yayin. Varsayilan yol tarayici (Studio); 'api' istenirse Data API."""
     cfg = job.cfg
     state = job.state()
     if not state.get("final_video"):
@@ -438,12 +445,135 @@ def upload(job: Job, *, dry_run: bool = False, upload_shorts: bool = False) -> d
         k: v for k, v in meta_dict.items() if k in seo.Metadata.__dataclass_fields__
     })
 
-    step(f"3/4 YouTube yuklemesi - {meta.title}")
+    route = (via or str(cfg.get("upload.via", "browser"))).lower()
+    label = "tarayici" if route == "browser" else "API"
+    step(f"3/4 Yayin ({label}) - {meta.title}")
+
     if dry_run:
         _print_preview(meta, state)
+        problems = publish_browser.preflight(meta, final, opt_path(state.get("thumbnail")))
+        if problems:
+            warn("Yayin oncesi kontrol uyarilari:")
+            for problem in problems:
+                print(f"    - {problem}")
+        else:
+            ok("Yayin oncesi kontroller temiz.")
         ok("Deneme modu: hicbir sey yuklenmedi.")
         return state
 
+    if route == "browser":
+        return _upload_browser(job, state, final, meta, upload_shorts=upload_shorts)
+    return _upload_api(job, state, final, meta, upload_shorts=upload_shorts)
+
+
+def _subtitle_map(state: dict) -> dict[str, Path]:
+    out: dict[str, Path] = {}
+    for lang, key in (("tr", "srt_tr"), ("en", "srt_en")):
+        path = opt_path(state.get(key))
+        if path:
+            out[lang] = path
+    return out
+
+
+def _record(job: Job, meta: seo.Metadata, video_id: str, url: str, extra: dict) -> dict:
+    record = {
+        "slug": job.slug,
+        "video_id": video_id,
+        "url": url,
+        "title": meta.title,
+        "privacy": meta.privacy,
+        "publish_at": meta.publish_at or "",
+        "playlist": meta.playlist,
+        "uploaded_at": utc_now().isoformat(),
+        "source_file": str(job.video.path),
+        **extra,
+    }
+    history = read_json(job.cfg.history_file, []) or []
+    history.append(record)
+    write_json(job.cfg.history_file, history)
+    return record
+
+
+# ------------------------------------------------------------ tarayici yolu
+def _upload_browser(
+    job: Job,
+    state: dict,
+    final: Path,
+    meta: seo.Metadata,
+    *,
+    upload_shorts: bool,
+) -> dict:
+    cfg = job.cfg
+    shots_dir = ensure_dir(job.work / "browser")
+    want_shorts = upload_shorts or bool(cfg.get("upload.upload_shorts", False))
+    shorts = [Path(s) for s in state.get("shorts", [])] if want_shorts else []
+
+    outcome = publish_browser.run(
+        cfg,
+        video=final,
+        meta=meta,
+        thumbnail=opt_path(state.get("thumbnail")),
+        subtitles=_subtitle_map(state),
+        shots_dir=shots_dir,
+        thumbnail_variants=[Path(v) for v in state.get("thumbnail_variants", [])],
+        shorts=shorts,
+    )
+
+    record = _record(
+        job, meta, outcome.get("video_id", ""), outcome.get("url", ""),
+        {
+            "via": "browser",
+            "completed": outcome.get("completed", []),
+            "skipped": outcome.get("skipped", []),
+            "manual_todo": outcome.get("manual_todo", []),
+        },
+    )
+    _print_browser_summary(meta, outcome)
+    return job.save_state(stage="uploaded", **record)
+
+
+def _print_browser_summary(meta: seo.Metadata, outcome: dict) -> None:
+    print()
+    print("=" * 72)
+    if outcome.get("url"):
+        ok(f"YAYINDA: {outcome['url']}")
+        print(f"  Studio     : https://studio.youtube.com/video/{outcome.get('video_id', '')}/edit")
+    else:
+        warn("Video kimligi okunamadi - Studio'dan kontrol edin.")
+    print(f"  Baslik     : {meta.title}")
+    print(f"  Etiket     : {len(meta.tags)} | Bolum: {len(meta.chapters)}")
+    if meta.publish_at:
+        print(f"  Planli     : {meta.publish_at} (UTC)")
+
+    done = outcome.get("completed", [])
+    if done:
+        print(f"  Tamamlanan : {', '.join(done)}")
+    for warning in outcome.get("warnings", []):
+        print(f"  ! {warning}")
+
+    todo = outcome.get("manual_todo", [])
+    if todo:
+        print()
+        print("  ELLE YAPILACAKLAR:")
+        for item in todo:
+            print(f"    - {item}")
+    else:
+        print()
+        print("  Elle yapilacak bir sey yok.")
+    print(f"  Ekran goruntuleri: {outcome.get('shots_dir', '')}")
+    print("=" * 72)
+
+
+# ----------------------------------------------------------------- API yolu
+def _upload_api(
+    job: Job,
+    state: dict,
+    final: Path,
+    meta: seo.Metadata,
+    *,
+    upload_shorts: bool,
+) -> dict:
+    cfg = job.cfg
     service = youtube.authorize(cfg.secrets_dir)
     channel = youtube.channel_info(service)
     info(f"Kanal: {channel['title']} ({channel['subscribers']} abone)")
@@ -499,22 +629,10 @@ def upload(job: Job, *, dry_run: bool = False, upload_shorts: bool = False) -> d
     if upload_shorts:
         shorts_ids = _upload_shorts(job, service, state, video_id)
 
-    record = {
-        "slug": job.slug,
-        "video_id": video_id,
-        "url": youtube.video_url(video_id),
-        "title": meta.title,
-        "privacy": meta.privacy,
-        "publish_at": meta.publish_at or "",
-        "playlist": meta.playlist,
-        "shorts": shorts_ids,
-        "uploaded_at": utc_now().isoformat(),
-        "source_file": str(job.video.path),
-    }
-    history = read_json(cfg.history_file, []) or []
-    history.append(record)
-    write_json(cfg.history_file, history)
-
+    record = _record(
+        job, meta, video_id, youtube.video_url(video_id),
+        {"via": "api", "shorts": shorts_ids},
+    )
     _print_summary(meta, record, state)
     return job.save_state(stage="uploaded", **record)
 
@@ -594,6 +712,7 @@ def publish(
     frame_count: int = 14,
     image_source: str | None = None,
     interactive: bool = True,
+    via: str | None = None,
 ) -> dict:
     """prep -> render -> upload. claude-code beyninde brief yoksa durur."""
     state = job.state()
@@ -610,7 +729,7 @@ def publish(
         )
 
     render(job, skip_edit=skip_edit, image_source=image_source, interactive=interactive)
-    return upload(job, dry_run=dry_run, upload_shorts=upload_shorts)
+    return upload(job, dry_run=dry_run, upload_shorts=upload_shorts, via=via)
 
 
 def report(job: Job) -> str:

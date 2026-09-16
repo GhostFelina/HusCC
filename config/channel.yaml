@@ -21,6 +21,10 @@ channel:
     twitch: ""
 
 upload:
+  # Yayin yolu:
+  #   browser : YouTube Studio'yu gercek Chrome'da surer (varsayilan, API gerektirmez)
+  #   api     : YouTube Data API v3 (Google Cloud OAuth istemcisi gerekir)
+  via: "browser"
   # public | unlisted | private
   privacy: "public"
   category_id: "20"          # 20 = Gaming
@@ -37,6 +41,12 @@ upload:
   timezone: "Europe/Istanbul"
   # Notify subscribers
   notify_subscribers: true
+  # Yayin sonrasi Studio islemleri (API'nin yapamadiklari)
+  end_screen: true          # bitis ekranini sablondan uygula
+  pin_first_comment: true   # ilk yorumu at ve sabitle
+  ab_thumbnails: false      # kucuk resim A/B testi (uygun kanallarda)
+  verify_after: true        # yayindan sonra videoyu acip dogrula
+  upload_shorts: false      # Shorts'lari da yukle
 
 seo:
   # Baslik en fazla 70 karakter tutulur (mobilde kesilmesin)
@@ -116,3 +126,19 @@ paths:
   work_dir: "./work"
   # Yayina hazir ciktilar
   out_dir: "./out"
+
+browser:
+  # Hangi tarayici: chrome | msedge | chromium
+  channel: "chrome"
+  # Oturum burada saklanir; bir kez giris yapilir, bir daha sorulmaz
+  profile_dir: "./secrets/browser-profile"
+  # Pencere gorunur olsun (onerilen - ne oldugunu izlersin)
+  headless: false
+  # Her eylem arasinda bekleme (ms) - izlemesi kolay olsun diye artirilabilir
+  slow_mo: 0
+  # Yuklemenin bitmesi icin en fazla bekleme (saniye)
+  upload_timeout: 5400
+  # Google girisi icin en fazla bekleme (saniye)
+  login_timeout: 900
+  # Hata halinde tarayiciyi acik birak (elle tamamlayabilmek icin)
+  keep_open_on_error: true

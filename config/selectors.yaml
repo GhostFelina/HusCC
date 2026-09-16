@@ -1,0 +1,222 @@
+# =====================================================================
+#  YouTube Studio element haritasi
+#
+#  Kod hicbir CSS seciciyi icinde barindirmaz; hepsi burada. YouTube
+#  arayuzunu degistirirse tek yapilacak is bu dosyayi guncellemektir.
+#
+#  Her anahtar, sirayla denenecek strateji listesidir. Ilk tutan kazanir.
+#    css=...            CSS secici
+#    text=...           Gorunur metin (Playwright text motoru)
+#    role=rol|ad        ARIA rolu + erisilebilir ad (regex, TR|EN)
+#    xpath=...          XPath
+#    label=...          Etiketine gore form alani
+#
+#  Arayuz dili TR ya da EN olabilir; metin tabanli stratejiler her ikisini
+#  de kapsayacak sekilde yazilmistir.
+# =====================================================================
+
+# ------------------------------------------------------------- oturum
+signed_in_avatar:
+  - css: "button#avatar-btn"
+  - css: "ytd-topbar-menu-button-renderer #avatar-btn"
+  - css: "ytcp-account-button"
+  - css: "#account-button"
+sign_in_button:
+  - css: "a[href*='accounts.google.com/ServiceLogin']"
+  - role: "link|Oturum aç|Sign in"
+  - role: "button|Oturum aç|Sign in"
+
+# ------------------------------------------------------- yukleme girisi
+create_button:
+  - css: "ytcp-button#create-icon"
+  - css: "#create-icon"
+  - role: "button|Oluştur|Create"
+upload_menu_item:
+  - css: "tp-yt-paper-item#text-item-0"
+  - text: "Video yükle"
+  - text: "Upload videos"
+  - role: "menuitem|Video yükle|Upload videos"
+upload_dialog:
+  - css: "ytcp-uploads-dialog"
+  - css: "tp-yt-paper-dialog[role='dialog']"
+file_input:
+  - css: "ytcp-uploads-file-picker input[type='file']"
+  - css: "input[type='file']"
+
+# -------------------------------------------------------- temel bilgiler
+title_box:
+  - css: "ytcp-social-suggestions-textbox[id='title-textarea'] #textbox"
+  - css: "#title-textarea #textbox"
+  - css: "div#textbox[aria-label*='başlık' i]"
+  - css: "div#textbox[aria-label*='title' i]"
+description_box:
+  - css: "ytcp-social-suggestions-textbox[id='description-textarea'] #textbox"
+  - css: "#description-textarea #textbox"
+  - css: "div#textbox[aria-label*='açıklama' i]"
+  - css: "div#textbox[aria-label*='description' i]"
+thumbnail_input:
+  - css: "ytcp-video-thumbnail-editor input#file-loader"
+  - css: "input#file-loader"
+  - css: "ytcp-thumbnails-compact-editor-uploader input[type='file']"
+thumbnail_uploader_button:
+  - css: "ytcp-thumbnails-compact-editor-uploader-old #still-picker-button"
+  - role: "button|Küçük resim yükle|Upload thumbnail|Dosya yükle"
+
+# ----------------------------------------------------------- oynatma listesi
+playlist_trigger:
+  - css: "ytcp-video-metadata-playlists ytcp-text-dropdown-trigger"
+  - css: "ytcp-text-dropdown-trigger#playlists-dropdown"
+  - css: "#basics ytcp-text-dropdown-trigger"
+playlist_search:
+  - css: "ytcp-playlist-dialog #search-input input"
+  - css: "ytcp-playlist-dialog input[type='text']"
+playlist_new_button:
+  - css: "ytcp-playlist-dialog ytcp-button#create-playlist-button"
+  - role: "button|Yeni oynatma listesi|New playlist"
+playlist_new_title:
+  - css: "ytcp-playlist-metadata-editor #title-input textarea"
+  - css: "ytcp-playlist-metadata-editor textarea"
+playlist_new_visibility:
+  - css: "ytcp-playlist-metadata-editor ytcp-form-select"
+playlist_new_create:
+  - css: "ytcp-playlist-metadata-editor ytcp-button#create-button"
+  - role: "button|Oluştur|Create"
+playlist_done:
+  - css: "ytcp-playlist-dialog ytcp-button#done-button"
+  - role: "button|Bitti|Done"
+
+# -------------------------------------------------------------- hedef kitle
+not_for_kids_radio:
+  - css: "tp-yt-paper-radio-button[name='VIDEO_MADE_FOR_KIDS_NOT_MFK']"
+  - css: "#audience tp-yt-paper-radio-button:nth-of-type(2)"
+for_kids_radio:
+  - css: "tp-yt-paper-radio-button[name='VIDEO_MADE_FOR_KIDS_MFK']"
+age_restriction_off:
+  - css: "tp-yt-paper-radio-button[name='VIDEO_AGE_RESTRICTION_NONE']"
+
+# ------------------------------------------------------- gelismis ayarlar
+show_more_button:
+  - css: "ytcp-button#toggle-button"
+  - css: "#toggle-button"
+  - role: "button|Daha fazlasını göster|Show more"
+tags_input:
+  - css: "ytcp-form-input-container#tags-container input#text-input"
+  - css: "#tags-container input"
+  - css: "input[aria-label*='etiket' i]"
+  - css: "input[aria-label*='tag' i]"
+video_language_dropdown:
+  - css: "ytcp-form-language-input ytcp-text-dropdown-trigger"
+  - css: "#language-input ytcp-text-dropdown-trigger"
+category_dropdown:
+  - css: "ytcp-form-select#category ytcp-text-dropdown-trigger"
+  - css: "#category ytcp-text-dropdown-trigger"
+  - css: "ytcp-select#category"
+comments_dropdown:
+  - css: "ytcp-comments-section ytcp-text-dropdown-trigger"
+  - css: "#comments-section ytcp-text-dropdown-trigger"
+caption_certification_dropdown:
+  - css: "ytcp-form-select#certification ytcp-text-dropdown-trigger"
+recording_date_input:
+  - css: "ytcp-date-picker input"
+  - css: "#datepicker-trigger input"
+dropdown_option:
+  - css: "tp-yt-paper-item"
+  - css: "ytcp-menu-service-item-renderer"
+
+# ------------------------------------------------------------- altyazi
+subtitles_add_button:
+  - role: "button|Altyazı ekle|Add subtitles|ADD"
+  - css: "ytgn-video-subtitles-section ytcp-button"
+subtitles_upload_option:
+  - text: "Dosya yükle"
+  - text: "Upload file"
+subtitles_file_input:
+  - css: "ytcp-uploads-file-picker input[type='file']"
+  - css: "input[type='file']"
+
+# ------------------------------------------------------ adimlar / gorunurluk
+next_button:
+  - css: "ytcp-button#next-button"
+  - css: "#next-button"
+  - role: "button|İleri|Next"
+public_radio:
+  - css: "tp-yt-paper-radio-button[name='PUBLIC']"
+unlisted_radio:
+  - css: "tp-yt-paper-radio-button[name='UNLISTED']"
+private_radio:
+  - css: "tp-yt-paper-radio-button[name='PRIVATE']"
+schedule_radio:
+  - css: "#schedule-radio-button"
+  - css: "tp-yt-paper-radio-button[name='SCHEDULE']"
+  - role: "radio|Planla|Schedule"
+schedule_date_trigger:
+  - css: "#datepicker-trigger ytcp-dropdown-trigger"
+  - css: "ytcp-datetime-picker #datepicker-trigger"
+schedule_date_input:
+  - css: "ytcp-date-picker input"
+  - css: "tp-yt-paper-dialog input"
+schedule_time_input:
+  - css: "#time-of-day-container input"
+  - css: "ytcp-time-of-day-picker input"
+notify_subscribers_checkbox:
+  - css: "ytcp-checkbox-lit#notify-subscribers"
+  - role: "checkbox|Abonelere bildir|Notify subscribers"
+publish_button:
+  - css: "ytcp-button#done-button"
+  - css: "#done-button"
+  - role: "button|Yayınla|Publish|Kaydet|Save|Planla|Schedule"
+
+# --------------------------------------------------------- sonuc / kapanis
+upload_progress_label:
+  - css: "ytcp-video-upload-progress .progress-label"
+  - css: "span.progress-label"
+published_url_link:
+  - css: "ytcp-video-info a.style-scope"
+  - css: "a[href*='youtu.be/']"
+  - css: ".video-url-fadeable a"
+close_dialog_button:
+  - css: "ytcp-dialog ytcp-button#close-button"
+  - css: "#close-button"
+  - role: "button|Kapat|Close"
+
+# ------------------------------------------------- bitis ekrani ve kartlar
+editor_tab:
+  - css: "#menu-item-4"
+  - role: "tab|Düzenleyici|Editor"
+endscreen_add_button:
+  - role: "button|Bitiş ekranı|End screen"
+  - css: "#endscreens-button"
+endscreen_template_first:
+  - css: "ytve-endscreen-template-picker .template:first-child"
+  - css: "ytve-endscreen-editor-template-row:first-child"
+endscreen_apply:
+  - role: "button|Uygula|Apply|Kaydet|Save"
+editor_save_button:
+  - css: "ytve-editor-toolbar ytcp-button#save-button"
+  - role: "button|Kaydet|Save"
+
+# ------------------------------------------------------ yorum ve sabitleme
+watch_comment_box:
+  - css: "ytd-comment-simplebox-renderer #placeholder-area"
+  - css: "#simplebox-placeholder"
+watch_comment_input:
+  - css: "ytd-commentbox #contenteditable-root"
+  - css: "#contenteditable-root"
+watch_comment_submit:
+  - css: "ytd-commentbox #submit-button"
+  - role: "button|Yorum yap|Comment"
+own_comment_menu:
+  - css: "ytd-comment-thread-renderer:first-of-type #action-menu button"
+  - css: "ytd-comment-view-model:first-of-type button[aria-label*='İşlem' i]"
+pin_menu_item:
+  - text: "Sabitle"
+  - text: "Pin"
+pin_confirm:
+  - role: "button|Sabitle|Pin"
+
+# ------------------------------------------------- kucuk resim A/B testi
+ab_test_button:
+  - role: "button|Test ve karşılaştır|Test & compare"
+  - css: "#thumbnail-ab-test-button"
+ab_add_thumbnail_input:
+  - css: "ytcp-thumbnail-ab-editor input[type='file']"
