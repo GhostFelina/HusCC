@@ -547,6 +547,15 @@ def cmd_init(args) -> int:
     return 0
 
 
+def cmd_selftest(args) -> int:
+    """Sentetik videoyla tum boru hattini calistirir; YouTube'a dokunmaz."""
+    from . import selftest
+
+    print(BANNER)
+    step("Kendi kendini sinama")
+    return selftest.run(keep=args.keep, with_browser=args.browser)
+
+
 def cmd_clean(args) -> int:
     cfg = _cfg(args)
     import shutil
@@ -676,6 +685,15 @@ def build_parser() -> argparse.ArgumentParser:
     publish_all.add_argument("--image-source", choices=["auto", "api", "browser", "frame"])
     publish_all.add_argument("--via", choices=["browser", "api"])
     publish_all.set_defaults(func=cmd_publish_all)
+
+    selftest = sub.add_parser(
+        "selftest", help="Sentetik videoyla tum boru hattini dogrula (YouTube'a dokunmaz)"
+    )
+    selftest.add_argument("--browser", action="store_true",
+                          help="Tarayici acilisini da dene")
+    selftest.add_argument("--keep", action="store_true",
+                          help="Gecici dosyalari silme (incelemek icin)")
+    selftest.set_defaults(func=cmd_selftest)
 
     clean = sub.add_parser("clean", help="Ara dosyalari sil")
     clean.add_argument("name", nargs="?")

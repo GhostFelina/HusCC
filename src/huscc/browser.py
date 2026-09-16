@@ -107,22 +107,74 @@ class Session:
             "--disable-session-crashed-bubble",
             "--window-size=1600,1000",
         ]
-        try:
-            self._ctx = self._pw.chromium.launch_persistent_context(
-                user_data_dir=str(self.profile_dir),
-                channel=self.channel,
-                headless=self.headless,
-                args=args,
-                viewport={"width": 1600, "height": 950},
-                accept_downloads=True,
-            )
-        except Exception as exc:
-            self.stop()
-            raise self._launch_error(exc) from exc
+        self._ctx = self._launch_with_fallback(args)
 
         self._ctx.set_default_timeout(30_000)
         self._page = self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
         return self
+
+    def _launch_with_fallback(self, args: list[str]):
+        """Once istenen tarayici, olmazsa Edge, en son Playwright'in Chromium'u."""
+        chain = [self.channel]
+        for alternative in ("chrome", "msedge"):
+            if alternative not in chain:
+                chain.append(alternative)
+        chain.append(None)  # Playwright'in kendi Chromium'u
+
+        last: Exception | None = None
+        for index, channel in enumerate(chain):
+            try:
+                context = self._pw.chromium.launch_persistent_context(
+                    user_data_dir=str(self.profile_dir),
+                    channel=channel,
+                    headless=self.headless,
+                    slow_mo=self.slow_mo or 0,
+                    args=args,
+                    viewport={"width": 1600, "height": 950},
+                    accept_downloads=True,
+                )
+                if index > 0:
+                    warn(
+                        f"{self.channel} acilamadi; {channel or 'Playwright Chromium'} "
+                        "ile devam ediliyor."
+                    )
+                    self.channel = channel or "chromium"
+                return context
+            except Exception as exc:  # noqa: BLE001
+                last = exc
+                text = str(exc).lower()
+                # Profil kilidi ya da kullanici hatasi ise yedege gecmenin anlami yok
+                if self.is_profile_locked() or "singleton" in text or "already in use" in text:
+                    break
+                if channel is None and "executable doesn" in text:
+                    self._install_chromium()
+                    try:
+                        return self._pw.chromium.launch_persistent_context(
+                            user_data_dir=str(self.profile_dir),
+                            channel=None,
+                            headless=self.headless,
+                            args=args,
+                            viewport={"width": 1600, "height": 950},
+                            accept_downloads=True,
+                        )
+                    except Exception as inner:  # noqa: BLE001
+                        last = inner
+        self.stop()
+        raise self._launch_error(last or RuntimeError("bilinmeyen hata"))
+
+    def _install_chromium(self) -> None:
+        """Yedek tarayiciyi (Playwright Chromium) indirir."""
+        import subprocess
+        import sys
+
+        info("Yedek tarayici indiriliyor (Playwright Chromium)...")
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "playwright", "install", "chromium"],
+                check=False, timeout=900,
+            )
+        except Exception as exc:  # noqa: BLE001
+            warn(f"Yedek tarayici indirilemedi: {exc}")
 
     def _launch_error(self, exc: Exception) -> HusccError:
         """Chrome acilmadiginda gercek nedeni Turkce anlatir."""

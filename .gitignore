@@ -27,6 +27,8 @@ venv/
 *.wav
 *.srt
 !assets/**/*.png
+!assets/fonts/*.ttf
+!assets/fonts/*.txt
 
 # Sistem
 .DS_Store

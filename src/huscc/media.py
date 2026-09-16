@@ -18,24 +18,74 @@ _EXTRA_DIRS = [
 ]
 
 
+_CACHE: dict[str, str] = {}
+
+
+def _scoop_choco_dirs() -> list[Path]:
+    home = Path.home()
+    return [
+        home / "scoop" / "shims",
+        Path("C:/ProgramData/chocolatey/bin"),
+        home / "AppData/Local/Programs/ffmpeg/bin",
+    ]
+
+
+def _bundled(binary: str) -> str | None:
+    """imageio-ffmpeg ile gelen statik ffmpeg (son care, kurulum gerektirmez)."""
+    if binary != "ffmpeg":
+        return None
+    try:
+        import imageio_ffmpeg
+
+        path = imageio_ffmpeg.get_ffmpeg_exe()
+        return path if path and Path(path).exists() else None
+    except Exception:
+        return None
+
+
 def _resolve(binary: str) -> str:
+    if binary in _CACHE:
+        return _CACHE[binary]
+
+    # 1) Yapilandirmada acikca verilmisse
+    override = os.environ.get(f"HUSCC_{binary.upper()}")
+    if override and Path(override).exists():
+        _CACHE[binary] = override
+        return override
+
+    # 2) PATH
     found = which(binary)
     if found:
+        _CACHE[binary] = found
         return found
-    for folder in _EXTRA_DIRS:
+
+    # 3) Bilinen klasorler
+    for folder in _EXTRA_DIRS + _scoop_choco_dirs():
         for suffix in (".exe", ".cmd", ".bat", ""):
             cand = folder / f"{binary}{suffix}"
             if cand.exists():
+                _CACHE[binary] = str(cand)
                 return str(cand)
-    # winget paket klasoru (PATH'e yeni oturumda yansir)
+
+    # 4) winget paket klasoru (PATH'e ancak yeni oturumda yansir)
     packages = Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Packages"
     if packages.exists():
         for cand in packages.glob(f"*FFmpeg*/**/bin/{binary}.exe"):
+            _CACHE[binary] = str(cand)
             return str(cand)
+
+    # 5) Pip ile gelen statik ikili
+    fallback = _bundled(binary)
+    if fallback:
+        _CACHE[binary] = fallback
+        return fallback
+
     raise HusccError(
         f"{binary} bulunamadi. Kurmak icin:\n"
-        "  winget install --id Gyan.FFmpeg -e --accept-package-agreements\n"
-        "  (macOS: brew install ffmpeg | Linux: sudo apt install ffmpeg)"
+        "  Windows: winget install --id Gyan.FFmpeg -e --accept-package-agreements\n"
+        "  macOS  : brew install ffmpeg\n"
+        "  Linux  : sudo apt install -y ffmpeg\n"
+        "  Ya da : uv pip install --python .venv imageio-ffmpeg"
     )
 
 
@@ -45,6 +95,14 @@ def ffmpeg_bin() -> str:
 
 def ffprobe_bin() -> str:
     return _resolve("ffprobe")
+
+
+def have_ffprobe() -> bool:
+    try:
+        ffprobe_bin()
+        return True
+    except HusccError:
+        return False
 
 
 def have_ffmpeg() -> bool:
@@ -84,7 +142,13 @@ class MediaInfo:
 
 
 def probe(path: Path) -> MediaInfo:
-    """Videonun teknik bilgilerini cikarir."""
+    """Videonun teknik bilgilerini cikarir.
+
+    ffprobe varsa onu kullanir; yoksa `ffmpeg -i` ciktisini ayristirir.
+    Boylece yalnizca statik ffmpeg ikilisi olan makinelerde de calisir.
+    """
+    if not have_ffprobe():
+        return _probe_with_ffmpeg(path)
     proc = run(
         [
             ffprobe_bin(), "-v", "error", "-print_format", "json",
@@ -129,6 +193,62 @@ def probe(path: Path) -> MediaInfo:
         audio_codec=str((audio or {}).get("codec_name", "")),
         size_bytes=int(fmt.get("size") or path.stat().st_size),
         bitrate=int(fmt.get("bit_rate") or 0),
+    )
+
+
+_DUR_RE = re.compile(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)")
+_VIDEO_RE = re.compile(
+    r"Stream #\d+:\d+.*?: Video:\s*(\w+).*?,\s*(\d{2,5})x(\d{2,5})", re.S
+)
+_FPS_RE = re.compile(r"(\d+\.?\d*)\s*(?:fps|tbr)")
+_AUDIO_RE = re.compile(r"Stream #\d+:\d+.*?: Audio:\s*(\w+)")
+_ROT_RE = re.compile(r"rotate\s*:\s*(-?\d+)")
+
+
+def _probe_with_ffmpeg(path: Path) -> MediaInfo:
+    """ffprobe yokken teknik bilgiyi `ffmpeg -i` ciktisindan okur."""
+    proc = run([ffmpeg_bin(), "-hide_banner", "-i", str(path)], check=False)
+    text = (proc.stderr or "") + (proc.stdout or "")
+
+    duration = 0.0
+    match = _DUR_RE.search(text)
+    if match:
+        hours, minutes, seconds = match.groups()
+        duration = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+
+    video = _VIDEO_RE.search(text)
+    if not video:
+        raise HusccError(f"Video akisi okunamadi: {path.name}")
+    codec, width, height = video.group(1), int(video.group(2)), int(video.group(3))
+
+    fps = 30.0
+    tail = text[video.end() : video.end() + 220]
+    fps_match = _FPS_RE.search(tail)
+    if fps_match:
+        try:
+            fps = float(fps_match.group(1))
+        except ValueError:
+            fps = 30.0
+
+    audio = _AUDIO_RE.search(text)
+    rotation = 0
+    rot_match = _ROT_RE.search(text)
+    if rot_match:
+        rotation = abs(int(rot_match.group(1))) % 180
+    if rotation == 90:
+        width, height = height, width
+
+    return MediaInfo(
+        path=str(path),
+        duration=duration,
+        width=width,
+        height=height,
+        fps=round(fps, 3),
+        has_audio=audio is not None,
+        video_codec=codec,
+        audio_codec=audio.group(1) if audio else "",
+        size_bytes=path.stat().st_size,
+        bitrate=0,
     )
 
 
