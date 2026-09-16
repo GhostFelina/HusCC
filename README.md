@@ -48,18 +48,57 @@ API yolu yine duruyor: `--via api` ya da `config/channel.yaml > upload.via: api`
 
 ---
 
-## Kurulum
+## Kurulum (sıfır bilgisayarda)
 
 ```bash
 git clone https://github.com/GhostFelina/HusCC.git
 cd HusCC
-python bootstrap.py       # sanal ortam, bağımlılıklar, ffmpeg, Chrome
-huscc doctor              # eksik var mı
-huscc login               # bir kerelik Google girişi
+python check.py           # kurulumdan ÖNCE: ne eksik? (hiçbir bağımlılık gerektirmez)
+python bootstrap.py       # sanal ortam, bağımlılıklar, ffmpeg, Chrome + doğrulama
 ```
 
-`huscc login` görünür bir Chrome penceresi açar; girişi sen yaparsın. Oturum
+`bootstrap.py` sonunda **otomatik olarak `huscc selftest` çalıştırır.** Çıktıda
+`MAKINE HAZIR` yazıyorsa makine gerçekten hazırdır — tahmin değil, ölçüm.
+
+Sonra tek seferlik giriş:
+
+```bash
+.venv/Scripts/huscc login     # Windows
+.venv/bin/huscc login         # macOS / Linux
+```
+
+Görünür bir Chrome penceresi açılır; girişi sen yaparsın. Oturum
 `secrets/browser-profile/` içinde saklanır, bir daha sorulmaz.
+
+### Komut nasıl çalıştırılır
+
+PowerShell'de geçerli klasör PATH'te değildir, bu yüzden:
+
+| | Komut |
+|---|---|
+| Windows (PowerShell) | `.\huscc.cmd publish "video adı"` |
+| Windows (tam yol) | `.venv\Scripts\huscc publish "video adı"` |
+| macOS / Linux | `./huscc publish "video adı"` |
+
+Sık kullanacaksan bu oturum için PATH'e ekle:
+`$env:PATH = "$PWD\.venv\Scripts;$env:PATH"`
+
+### Makine gerçekten hazır mı?
+
+```bash
+huscc selftest              # sentetik videoyla tüm boru hattı (~10 sn)
+huscc selftest --browser    # tarayıcı açılışını da dener
+```
+
+Sentetik bir video üretir; analiz, brief, kapak (3 varyant), kurgu, outro, meta
+veri ve yayın öncesi kontrollerin tamamını **gerçek dosyalarla** çalıştırır.
+YouTube'a hiçbir şey gitmez, senin klasörlerine dokunulmaz — her şey geçici bir
+dizinde olur ve silinir.
+
+```
+  SONUC: 21/21 kontrol gecti   (9.2 sn)
+  ✓ MAKINE HAZIR.
+```
 
 ### Görsel üretimi (opsiyonel)
 
@@ -197,6 +236,24 @@ Sunucu yalnızca `127.0.0.1` dinler.
 
 ---
 
+## Tek nokta bağımlılığı yok
+
+Kurulumun tökezleyebileceği her yerde yedek zincir var:
+
+| Bileşen | Zincir |
+|---|---|
+| **ffmpeg** | PATH → bilinen klasörler → winget paketi → scoop/choco → pip ile gelen statik ikili |
+| **ffprobe** | Varsa kullanılır; yoksa teknik bilgi `ffmpeg -i` çıktısından ayrıştırılır |
+| **Tarayıcı** | Yapılandırılan kanal → Chrome → Edge → Playwright Chromium (gerekirse kendi indirir) |
+| **Kapak fontu** | Anton (OFL) depoda gömülü — sistem fontu gerekmez, Türkçe kapsamı garanti |
+| **Python** | Sanal ortam için 3.12 → 3.13 → 3.11 sırayla denenir (3.14'te bazı paketlerin tekerleği yok) |
+| **Altyazı** | faster-whisper yoksa adım atlanır, yayın etkilenmez |
+
+Windows'ta `python` komutu Microsoft Store kısayoluysa kurulum bunu fark eder ve
+gerçek Python'un nasıl kurulacağını söyler.
+
+---
+
 ## Sınırlar
 
 * Kanalın normal yükleme sınırları geçerli (yeni kanallarda günde birkaç video).
@@ -209,8 +266,9 @@ Sunucu yalnızca `127.0.0.1` dinler.
 ## Geliştirme
 
 ```bash
-python -m pytest tests -q
+python -m pytest tests -q        # 67 test
 python -m compileall -q src/huscc
+huscc selftest                   # uçtan uca, gerçek dosyalarla
 ```
 
 Mimari ve Claude ile çalışma kuralları: [`CLAUDE.md`](CLAUDE.md)

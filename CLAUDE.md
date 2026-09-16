@@ -34,15 +34,35 @@ Hata cikarsa dur, Turkce acikla, coz, devam et.
 
 ## 1. Kurulum akisi (yeni bilgisayarda ilk kez)
 
+Sirayla, atlamadan:
+
 ```bash
 git clone https://github.com/GhostFelina/HusCC.git
 cd HusCC
-python bootstrap.py       # sanal ortam + bagimliliklar + ffmpeg + Chrome
-huscc doctor              # eksik var mi
-huscc login               # bir kerelik Google girisi (tarayicida)
+python check.py           # 1) kurulumdan ONCE ne eksik (bagimlilik gerektirmez)
+python bootstrap.py       # 2) her seyi kurar ve sonunda selftest calistirir
 ```
 
-`bootstrap.py` her seyi kurar. `doctor` ciktisinda eksik kalirsa:
+`bootstrap.py` ciktisinin sonunda **`MAKINE HAZIR`** gormeden ilerleme.
+Gormediysen orada yazan eksigi coz ve `huscc selftest` ile tekrar dogrula.
+
+```bash
+huscc login               # 3) bir kerelik Google girisi (kullanici yapar)
+huscc probe               # 4) Studio secicilerini dogrula (yukleme yapmaz)
+```
+
+### Komutu nasil calistiracaksin
+
+PATH'e guvenme. **Her zaman tam yolu kullan:**
+
+* Windows : `.venv\Scripts\huscc <komut>`
+* mac/Linux: `.venv/bin/huscc <komut>`
+
+Depo kokundeki `huscc.cmd` (Windows) ve `./huscc` (mac/Linux) sarmalayicilari da
+ayni isi yapar. PowerShell'de gecerli klasor PATH'te olmadigi icin `huscc` diye
+yazmak calismaz; `.\huscc.cmd` yaz.
+
+`bootstrap.py` her seyi kurar. Yine de eksik kalirsa:
 
 * **Playwright yok** → `uv pip install --python .venv playwright`
 * **Chrome yok** → `winget install --id Google.Chrome -e`
@@ -50,6 +70,14 @@ huscc login               # bir kerelik Google girisi (tarayicida)
   Edge kullanilacaksa `config/channel.yaml > browser.channel: msedge`
 * **ffmpeg yok** → `winget install --id Gyan.FFmpeg -e --accept-package-agreements`
 * **faster-whisper yok** → `uv pip install --python .venv faster-whisper`
+  (zorunlu degil; yoksa altyazi adimi atlanir, yayin etkilenmez)
+* **Python 3.14** → sanal ortam 3.12 ile kurulur; bootstrap bunu kendi halleder
+
+Kurulumun tokezleyebilecegi her yerde yedek zincir var, bunlari bilerek hareket et:
+ffmpeg (PATH → winget → scoop/choco → pip'in statik ikilisi), ffprobe (yoksa
+`ffmpeg -i` ayristirilir), tarayici (Chrome → Edge → Playwright Chromium),
+kapak fontu (Anton depoda gomulu). Yani "bulunamadi" hatasi gorursen once
+`huscc selftest` calistir; gercekten eksik olani o soyler.
 
 `huscc login` gorunur bir Chrome penceresi acar. Giris **kullanicinin kendisi**
 tarafindan yapilir; sen sifre girmeye calisma, beklemeyi komut zaten yonetiyor.
@@ -70,6 +98,17 @@ Kanalda yayinlanmis video varsa `huscc probe` duzenleme sayfasini da dener;
 yoksa `--video <kimlik>` ile bir video verebilirsin. Yeni kanalda yayinlanmis
 video yoksa sonda yalnizca ana sayfa ve yukleme penceresini kontrol eder,
 bu da normaldir.
+
+### Her sey calisiyor mu?
+
+```bash
+huscc selftest            # sentetik videoyla tum boru hattini calistirir (~10 sn)
+huscc selftest --browser  # tarayici acilisini da dener
+```
+
+Bu komut YouTube'a dokunmaz, kullanicinin klasorlerine dokunmaz; gecici bir
+dizinde sentetik video uretip analiz-brief-kapak-kurgu-meta veri-preflight
+zincirinin tamamini gercek dosyalarla kosar. Bir sey bozduysan once bunu calistir.
 
 `secrets/` klasoru `.gitignore`'da. Icine bakma, yazdirma, commit etme.
 
@@ -219,6 +258,10 @@ src/huscc/
   pipeline.py        prep -> render -> upload orkestrasyonu, durum takibi
   server.py          yerel kontrol paneli (stdlib HTTP, SSE log akisi)
   web_ui.py          panelin HTML/CSS/JS'i
+  selftest.py        sentetik videoyla uctan uca dogrulama
+
+check.py             kurulum oncesi stdlib kontrolu (bagimlilik gerektirmez)
+bootstrap.py         kurulum + sonunda otomatik dogrulama
 
 config/
   channel.yaml       kanal kimligi, yayin tercihleri, kapak, kurgu, tarayici ayarlari
@@ -239,7 +282,8 @@ Ucu de `.gitignore` icinde.
   Zorunlu olanlar yalnizca: dosya secimi, baslik, hedef kitle, gorunurluk, yayinla.
 * YouTube sinirlari: baslik ≤100, aciklama ≤5000, etiketler toplam ≤500, kapak ≤2 MB.
   `publish_browser.preflight` bunlari yayin oncesi denetliyor; yeni alan eklerken koru.
-* Degisiklikten sonra: `python -m pytest tests -q` ve `huscc doctor`.
+* Degisiklikten sonra sirayla: `python -m pytest tests -q`, `huscc selftest`,
+  ve tarayici tarafina dokunduysan `huscc probe`.
 
 ## 6. Yapma
 
