@@ -36,8 +36,10 @@ Hata cikarsa dur, Turkce acikla, coz, devam et.
 
 Sirayla, atlamadan:
 
+Depo private; once `gh auth login` (ya da token ile klon).
+
 ```bash
-git clone https://github.com/GhostFelina/HusCC.git
+gh repo clone GhostFelina/HusCC
 cd HusCC
 python check.py           # 1) kurulumdan ONCE ne eksik (bagimlilik gerektirmez)
 python bootstrap.py       # 2) her seyi kurar ve sonunda selftest calistirir

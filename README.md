@@ -50,8 +50,11 @@ API yolu yine duruyor: `--via api` ya da `config/channel.yaml > upload.via: api`
 
 ## Kurulum (sıfır bilgisayarda)
 
+Depo **private**; yeni bilgisayarda once GitHub girisi gerekir
+(`gh auth login`, ya da klonlarken kullanici adi + personal access token).
+
 ```bash
-git clone https://github.com/GhostFelina/HusCC.git
+gh repo clone GhostFelina/HusCC        # ya da: git clone https://github.com/GhostFelina/HusCC.git
 cd HusCC
 python check.py           # kurulumdan ÖNCE: ne eksik? (hiçbir bağımlılık gerektirmez)
 python bootstrap.py       # sanal ortam, bağımlılıklar, ffmpeg, Chrome + doğrulama
