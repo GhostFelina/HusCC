@@ -175,17 +175,34 @@ def _find_browser(channel: str) -> str:
 
 
 def cmd_login(args) -> int:
-    """Bir kerelik Google girisi - oturum kalici profile yazilir."""
+    """Giris sihirbazi: gereken platformlari sirayla acar."""
+    from . import platforms
+
     cfg = _cfg(args)
     if args.reset:
         import shutil
 
         shutil.rmtree(cfg.browser_profile_dir, ignore_errors=True)
         info("Mevcut tarayici profili silindi.")
-    title = publish_browser.login(cfg)
-    ok(f"Giris tamam: {title or 'YouTube Studio'}")
-    print("  Artik 'huscc publish \"video adi\"' calistirabilirsiniz.")
-    return 0
+
+    only = [p.strip() for p in args.only.split(",")] if args.only else None
+
+    if not args.check:
+        print()
+        print("  Giris gereken platformlar sirayla acilacak.")
+        print("  Zaten girilmis olanlar atlanir; istemedigini Ctrl+C ile gecebilirsin.")
+        for platform in (
+            [platforms.by_key(k) for k in only] if only else platforms.PLATFORMS
+        ):
+            flag = "zorunlu" if platform.required else "istege bagli"
+            print(f"    · {platform.label} ({flag}) - {platform.url}")
+
+    results = publish_browser.login(cfg, only=only, check_only=args.check)
+    code = platforms.summarize(results)
+    if code == 0 and not args.check:
+        print()
+        print('  Hazir. Simdi:  huscc probe   ve sonra  huscc publish "video adi"')
+    return code
 
 
 def cmd_studio(args) -> int:
@@ -586,7 +603,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Tarayiciyi acip YouTube oturumunu da dogrula")
     doctor.set_defaults(func=cmd_doctor)
 
-    login = sub.add_parser("login", help="Google girisi (bir kerelik, tarayicida)")
+    login = sub.add_parser(
+        "login", help="Giris sihirbazi: YouTube, ChatGPT ve gereken platformlar"
+    )
+    login.add_argument("--only", help="Yalnizca bunlar (virgulle): youtube,chatgpt")
+    login.add_argument("--check", action="store_true",
+                       help="Giris yapma, yalnizca durumu goster")
     login.add_argument("--reset", action="store_true", help="Kayitli oturumu sil, bastan gir")
     login.set_defaults(func=cmd_login)
 
@@ -715,6 +737,14 @@ def main(argv: list[str] | None = None) -> int:
         print()
         warn("Iptal edildi.")
         return 130
+    except Exception as exc:  # noqa: BLE001
+        from .browser import BROWSER_CLOSED_MESSAGE, is_closed_error
+
+        if is_closed_error(exc):
+            print()
+            err(BROWSER_CLOSED_MESSAGE)
+            return 1
+        raise
 
 
 if __name__ == "__main__":

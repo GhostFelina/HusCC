@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .browser import Session, StepFailure
+from .browser import BROWSER_CLOSED_MESSAGE, Session, StepFailure, is_closed_error
 from .util import HusccError, hhmmss, info, ok, step as log_step, warn
 
 VIDEO_ID_RE = re.compile(r"(?:youtu\.be/|/video/|v=)([A-Za-z0-9_-]{11})")
@@ -86,6 +86,8 @@ class Runner:
             self.result.warnings.append(f"{label}: {exc.step} bulunamadi")
             return None
         except Exception as exc:  # noqa: BLE001
+            if is_closed_error(exc):
+                raise HusccError(BROWSER_CLOSED_MESSAGE) from exc
             if required:
                 raise HusccError(f"{label} basarisiz: {exc}") from exc
             warn(f"    atlandi: {label} ({exc})")

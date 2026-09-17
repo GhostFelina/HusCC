@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import studio
+from . import platforms, studio
 from .browser import Selectors, Session
 from .config import Config
 from .seo import Metadata
@@ -94,20 +94,41 @@ def open_session(cfg: Config, shots_dir: Path | None = None) -> Session:
     )
 
 
-def login(cfg: Config) -> str:
-    """Bir kerelik Google girisi. Kanal adini dondurur."""
+def login(cfg: Config, *, only: list[str] | None = None, check_only: bool = False) -> dict:
+    """Giris sihirbazi: gereken her platformu sirayla acar.
+
+    Zaten girilmis platformlar atlanir. Kullanici Ctrl+C ile tek tek atlayabilir.
+    """
     session = open_session(cfg, cfg.work_dir / "login")
     try:
         session.start()
-        session.ensure_signed_in(timeout=float(cfg.get("browser.login_timeout", 900)))
-        session.goto("https://studio.youtube.com/")
-        session.page.wait_for_timeout(2_000)
-        title = (session.page.title() or "").replace(" - YouTube Studio", "").strip()
-        _remember(cfg, title)
-        ok(f"Oturum hazir: {title or 'YouTube Studio'}")
-        return title
+
+        if check_only:
+            wanted = [platforms.by_key(k) for k in only] if only else platforms.PLATFORMS
+            results = platforms.status(session, wanted)
+        else:
+            results = platforms.login_all(
+                session, only=only,
+                timeout=float(cfg.get("browser.login_timeout", 900)),
+            )
+
+        if results.get("youtube"):
+            title = ""
+            try:
+                session.goto("https://studio.youtube.com/")
+                session.page.wait_for_timeout(1_500)
+                title = (session.page.title() or "").replace(" - YouTube Studio", "").strip()
+            except Exception:
+                pass
+            _remember(cfg, title)
+
+        return results
     finally:
         session.stop()
+
+
+def channel_title(cfg: Config) -> str:
+    return str(session_info(cfg).get("channel", ""))
 
 
 # -------------------------------------------------------------------- yayin

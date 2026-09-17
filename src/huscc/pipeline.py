@@ -245,12 +245,8 @@ def render(
     # --- kapak -----------------------------------------------------------
     assets = ensure_assets(cfg)
     source = image_source or str(cfg.get("thumbnail.source", "auto"))
-    ai_background, used_source = imagegen.acquire_background(
-        current, job.work,
-        source=source,
-        channel_game=cfg.game,
-        wait_seconds=float(cfg.get("thumbnail.ai_wait_seconds", 420)),
-        interactive=interactive,
+    ai_background, used_source = _acquire_background(
+        cfg, current, job, source=source, interactive=interactive
     )
     hero_source = ai_background or _hero_frame(job, current, media_info, state)
     if ai_background:
@@ -338,6 +334,37 @@ def render(
         final_video=str(final),
         shorts=shorts,
         brief_source=current.source,
+    )
+
+
+def _acquire_background(cfg: Config, current, job: Job, *, source: str, interactive: bool):
+    """Kapak arka plani. Anahtar yoksa ChatGPT tarayicidan surulur."""
+    import os
+
+    wait = float(cfg.get("thumbnail.ai_wait_seconds", 420))
+    needs_browser = source == "browser" or (
+        source == "auto" and not os.environ.get("OPENAI_API_KEY")
+    )
+
+    if needs_browser:
+        from . import publish_browser
+
+        session = publish_browser.open_session(cfg, job.work / "browser")
+        try:
+            session.start()
+            return imagegen.acquire_background(
+                current, job.work, source=source, channel_game=cfg.game,
+                wait_seconds=wait, interactive=interactive, session=session,
+            )
+        except HusccError as exc:
+            warn(f"Tarayici acilamadi ({exc}); video karesine dusuluyor.")
+        finally:
+            session.stop()
+        return None, "frame"
+
+    return imagegen.acquire_background(
+        current, job.work, source=source, channel_game=cfg.game,
+        wait_seconds=wait, interactive=interactive,
     )
 
 

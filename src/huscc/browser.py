@@ -62,6 +62,29 @@ class Selectors:
         return out
 
 
+BROWSER_CLOSED_MESSAGE = (
+    "Tarayici penceresi kapatildi.\n"
+    "  Islem yarida kesildi. Pencereyi acik birakip komutu tekrar calistirin.\n"
+    "  Yukleme baslamissa Studio'da taslak olarak duruyordur; 'huscc update' ile\n"
+    "  tamamlayabilirsiniz."
+)
+
+
+def is_closed_error(exc: BaseException) -> bool:
+    """Tarayici/pencere kapandigi icin olusan hata mi."""
+    text = str(exc).lower()
+    return any(
+        marker in text
+        for marker in (
+            "target page, context or browser has been closed",
+            "targetclosederror",
+            "browser has been closed",
+            "connection closed",
+            "websocket",
+        )
+    ) or type(exc).__name__ == "TargetClosedError"
+
+
 class StepFailure(HusccError):
     """Bir adim tamamlanamadi; rapor diske yazildi."""
 

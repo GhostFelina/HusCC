@@ -1,12 +1,14 @@
 """Yapay zeka gorsel uretimi (ChatGPT / gpt-image-1).
 
-Kapak arka plani ve diger gorseller uc yoldan gelebilir:
+Kapak arka plani dort yoldan gelebilir, sirayla denenir:
 
-  1. api      : OPENAI_API_KEY ile gpt-image-1 cagrilir (tam otomatik, onerilen)
-  2. browser  : Prompt panoya kopyalanir, VARSAYILAN tarayicida ChatGPT acilir,
-                kullanici goruntuyu indirip `work/<slug>/ai/` klasorune birakir;
-                CLI klasoru izler ve gelen gorseli kullanir.
-  3. frame    : Videodan secilen kare kullanilir (internet gerekmez)
+  1. api             : OPENAI_API_KEY ile gpt-image-1 cagrilir (en hizli)
+  2. chatgpt-browser : HusCC'nin kendi Chrome oturumunda ChatGPT acilir, prompt
+                       yazilir, uretilen gorsel indirilir. Anahtar gerekmez;
+                       yalnizca bir kez `huscc login --only chatgpt` yeterli.
+  3. elle devir      : Prompt panoya kopyalanir, kullanici gorseli
+                       `work/<slug>/ai/` klasorune birakir, CLI onu alir.
+  4. frame           : Videodan secilen kare (internet gerekmez)
 
 Metin her zaman PIL ile ustune yazilir: gorsel modelleri Turkce tipografide
 (ozellikle ı, ş, ğ) guvenilir degil, kapak yazisi okunakli olmak zorunda.
@@ -132,7 +134,81 @@ def generate_api(prompt: str, out_path: Path, *, size: str = "1536x1024") -> Pat
     return out_path
 
 
-# -------------------------------------------------------------- 2. tarayici
+# -------------------------------------------------- 2a. ChatGPT'yi surerek
+def generate_with_chatgpt(session, prompt: str, out_path: Path, *, timeout: float = 420.0):
+    """Acik ChatGPT oturumunda prompt'u yazip uretilen gorseli indirir.
+
+    Basarisiz olursa None doner; boru hatti video karesine ya da elle devre
+    akisina duser. Hicbir durumda yayini bloklamaz.
+    """
+    from . import platforms
+
+    chatgpt = platforms.by_key("chatgpt")
+    if not platforms.is_signed_in(session, chatgpt):
+        warn("ChatGPT oturumu yok - 'huscc login --only chatgpt' ile giris yapin.")
+        return None
+
+    info("ChatGPT'de kapak gorseli uretiliyor...")
+    try:
+        box = session.find("chatgpt_input", timeout=20_000)
+        box.click(timeout=8_000)
+        session.page.wait_for_timeout(300)
+        # Uzun metni tek seferde yaz (harf harf yazmak cok yavas)
+        session.page.keyboard.insert_text(
+            "Generate a single 16:9 image. " + prompt
+        )
+        session.page.wait_for_timeout(600)
+
+        if not session.click("chatgpt_send", timeout=8_000, required=False):
+            session.page.keyboard.press("Enter")
+        session.shot("chatgpt-istek")
+
+        deadline = time.time() + timeout
+        last_src = ""
+        stable_since = 0.0
+        while time.time() < deadline:
+            session.page.wait_for_timeout(3_000)
+            node = session.find("chatgpt_generated_image", timeout=2_000, required=False)
+            if node is not None:
+                try:
+                    src = node.get_attribute("src") or ""
+                except Exception:
+                    src = ""
+                if src and src.startswith("http"):
+                    # Uretim bitene kadar gorsel degisebilir; sabitlenmesini bekle
+                    if src == last_src:
+                        if stable_since and time.time() - stable_since > 4:
+                            return _download(session, src, out_path)
+                    else:
+                        last_src, stable_since = src, time.time()
+            still_working = session.exists("chatgpt_stop_button", timeout=1_000)
+            if not still_working and last_src:
+                return _download(session, last_src, out_path)
+        warn("ChatGPT gorseli zamaninda gelmedi.")
+        return None
+    except Exception as exc:  # noqa: BLE001
+        warn(f"ChatGPT surulemedi: {exc}")
+        session.shot("chatgpt-hata")
+        return None
+
+
+def _download(session, url: str, out_path: Path):
+    """Gorseli tarayicinin oturumuyla indirir (imzali adresler icin sart)."""
+    try:
+        response = session.context.request.get(url, timeout=120_000)
+        if not response.ok:
+            warn(f"Gorsel indirilemedi: HTTP {response.status}")
+            return None
+        ensure_dir(out_path.parent)
+        out_path.write_bytes(response.body())
+        ok(f"ChatGPT gorseli kaydedildi: {out_path.name}")
+        return out_path
+    except Exception as exc:  # noqa: BLE001
+        warn(f"Gorsel indirilemedi: {exc}")
+        return None
+
+
+# -------------------------------------------------------------- 2b. tarayici
 def copy_to_clipboard(text: str) -> bool:
     """Prompt'u panoya kopyalar (Windows/mac/Linux)."""
     try:
@@ -226,6 +302,7 @@ def acquire_background(
     for_outro: bool = False,
     wait_seconds: float = 420.0,
     interactive: bool = True,
+    session=None,
 ) -> tuple[Path | None, str]:
     """Kapak arka planini secilen kaynaktan getirir.
 
@@ -253,6 +330,12 @@ def acquire_background(
             warn(f"Gorsel API basarisiz: {exc}")
             if source == "api":
                 return None, "frame"
+
+    # Tarayici oturumu verilmisse ChatGPT'yi dogrudan sur
+    if source in {"browser", "auto"} and session is not None:
+        produced = generate_with_chatgpt(session, prompt, target, timeout=wait_seconds)
+        if produced:
+            return produced, "chatgpt-browser"
 
     if source in {"browser", "auto"}:
         dropped = latest_dropped(ai_dir)

@@ -258,3 +258,35 @@ probe_studio_home:
 probe_video_list:
   - css: "ytcp-video-section-content"
   - css: "#video-list"
+
+# =====================================================================
+#  ChatGPT (kapak gorseli uretimi)
+# =====================================================================
+#  Giris yapilmamisken de yazi kutusu gorunuyor; belirleyici sinyal
+#  "Oturum ac" dugmesidir. Once o kontrol edilir.
+chatgpt_login_button:
+  - css: "[data-testid='login-button']"
+  - role: "button|^Oturum aç$|^Oturum ac$|^Log in$"
+  - role: "link|^Oturum aç$|^Oturum ac$|^Log in$"
+  - text: "Ücretsiz kaydol"
+chatgpt_ready:
+  - css: "#prompt-textarea"
+  - css: "div[contenteditable='true']#prompt-textarea"
+  - css: "[data-testid='profile-button']"
+  - css: "[data-testid='accounts-profile-button']"
+chatgpt_input:
+  - css: "#prompt-textarea"
+  - css: "div[contenteditable='true']#prompt-textarea"
+  - css: "form div[contenteditable='true']"
+chatgpt_send:
+  - css: "[data-testid='send-button']"
+  - css: "button[aria-label*='Send' i]"
+  - css: "button[aria-label*='Gonder' i]"
+  - role: "button|Send prompt|Gonder|Gönder"
+chatgpt_generated_image:
+  - css: "div[data-testid^='conversation-turn'] img[src^='https://']"
+  - css: "main img[alt*='Generated' i]"
+  - css: "main img[src*='oaiusercontent']"
+chatgpt_stop_button:
+  - css: "[data-testid='stop-button']"
+  - css: "button[aria-label*='Stop' i]"
