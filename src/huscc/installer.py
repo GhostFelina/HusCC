@@ -233,3 +233,26 @@ def fix(names: list[str]) -> dict[str, bool]:
         else:
             warn(f"{label} kurulamadi.")
     return outcome
+
+
+# --------------------------------------------------------------- dogrudan
+def main(argv: list[str] | None = None) -> int:
+    """`python -m huscc.installer [depo-yolu]` - kisayolu yazar, PATH'e ekler.
+
+    bootstrap.py kurulumun sonunda bunu cagirir.
+    """
+    args = list(argv if argv is not None else sys.argv[1:])
+    root = Path(args[0]) if args else Path(__file__).resolve().parents[2]
+    try:
+        result = link(root)
+    except HusccError as exc:
+        warn(str(exc))
+        return 1
+    ok(f"'huscc' komutu hazir: {result['shim']}")
+    if result["path_updated"]:
+        info("PATH guncellendi - yeni bir terminal acildiginda 'huscc' calisir.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

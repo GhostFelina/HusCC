@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from . import brief as brief_mod
-from . import media, pipeline, publish_browser, subtitles, thumbnail, youtube
+from . import installer, media, pipeline, publish_browser, subtitles, thumbnail, youtube
 from .config import Config, load_config
 from .discover import list_videos
 from .util import HusccError, err, human_size, info, ok, read_json, step, warn, write_json
@@ -32,6 +32,7 @@ def cmd_doctor(args) -> int:
     step("Sistem kontrolu")
     cfg = _cfg(args)
     problems: list[str] = []
+    missing: list[str] = []   # installer.FIXERS anahtarlari
 
     print(f"  Proje klasoru   : {cfg.root}")
     print(f"  Video klasoru   : {cfg.video_dir}")
@@ -47,7 +48,8 @@ def cmd_doctor(args) -> int:
     if media.have_ffmpeg():
         ok(f"ffmpeg: {media.ffmpeg_bin()}")
     else:
-        problems.append("ffmpeg yok -> winget install --id Gyan.FFmpeg -e")
+        problems.append("ffmpeg yok -> huscc doctor --fix")
+        missing.append("ffmpeg")
         err("ffmpeg bulunamadi")
 
     try:
@@ -69,7 +71,8 @@ def cmd_doctor(args) -> int:
     if subtitles.available():
         ok(f"Altyazi motoru hazir (model: {cfg.get('subtitles.model', 'small')})")
     else:
-        warn("faster-whisper yok - altyazi uretilmez (uv pip install faster-whisper)")
+        warn("faster-whisper yok - altyazi uretilmez (huscc doctor --fix)")
+        missing.append("whisper")
 
     # --- yayin yolu: tarayici -------------------------------------------
     route = str(cfg.get("upload.via", "browser")).lower()
@@ -80,7 +83,8 @@ def cmd_doctor(args) -> int:
 
         ok("Playwright kurulu")
     except ImportError:
-        problems.append("Playwright yok -> uv pip install --python .venv playwright")
+        problems.append("Playwright yok -> huscc doctor --fix")
+        missing.append("playwright")
         err("Playwright yok")
 
     channel_name = str(cfg.get("browser.channel", "chrome"))
@@ -88,9 +92,8 @@ def cmd_doctor(args) -> int:
     if browser_path:
         ok(f"Tarayici: {channel_name} ({browser_path})")
     else:
-        problems.append(
-            f"{channel_name} bulunamadi -> winget install --id Google.Chrome -e"
-        )
+        problems.append(f"{channel_name} bulunamadi -> huscc doctor --fix")
+        missing.append("browser")
         err(f"{channel_name} bulunamadi")
 
     if cfg.selectors_path.exists():
@@ -109,8 +112,12 @@ def cmd_doctor(args) -> int:
     if args.browser:
         info("Tarayici acilip oturum deneniyor...")
         try:
-            title = publish_browser.login(cfg)
-            ok(f"Oturum dogrulandi: {title or 'YouTube Studio'}")
+            results = publish_browser.login(cfg, only=["youtube"], check_only=True)
+            if results.get("youtube"):
+                ok(f"Oturum dogrulandi: {publish_browser.channel_title(cfg) or 'YouTube'}")
+            else:
+                problems.append("YouTube oturumu yok -> huscc login")
+                err("YouTube oturumu yok")
         except HusccError as exc:
             problems.append(f"Oturum dogrulanamadi: {exc}")
             err(str(exc))
@@ -131,11 +138,36 @@ def cmd_doctor(args) -> int:
     else:
         info("OPENAI_API_KEY yok - kapak icin --image-source browser ya da frame")
 
+    if installer.is_linked():
+        ok(f"'huscc' komutu PATH'te ({installer.shim_dir()})")
+    else:
+        info("'huscc' komutu PATH'te degil -> huscc doctor --fix")
+
+    if getattr(args, "fix", False):
+        print()
+        step("Eksikler tamamlaniyor")
+        if missing:
+            installer.fix(missing)
+        else:
+            info("Kurulacak bilesen yok.")
+        if not installer.is_linked():
+            try:
+                result = installer.link(cfg.root)
+                ok(f"Kisayol yazildi: {result['shim']}")
+                if result["path_updated"]:
+                    info("PATH guncellendi - yeni bir terminalde 'huscc' calisir.")
+            except HusccError as exc:
+                warn(str(exc))
+        print()
+        info("Tekrar dogrulamak icin:  huscc doctor")
+        return 0
+
     print()
     if problems:
         err(f"{len(problems)} sorun var:")
         for problem in problems:
             print(f"    - {problem}")
+        print("  Otomatik denemek icin:  huscc doctor --fix")
         return 1
     ok("Her sey hazir. Kullanim:  huscc publish \"video adi\"")
     return 0
@@ -601,6 +633,8 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = sub.add_parser("doctor", help="Kurulumu ve baglantilari kontrol et")
     doctor.add_argument("--browser", action="store_true",
                         help="Tarayiciyi acip YouTube oturumunu da dogrula")
+    doctor.add_argument("--fix", action="store_true",
+                        help="Eksik bileseni kur ve 'huscc' komutunu PATH'e bagla")
     doctor.set_defaults(func=cmd_doctor)
 
     login = sub.add_parser(
