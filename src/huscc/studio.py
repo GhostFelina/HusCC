@@ -655,7 +655,7 @@ def print_probe(report: dict) -> int:
     """Raporu basar, tutmayan anahtar sayisini dondurur."""
     broken = 0
     labels = {"home": "Studio ana sayfasi", "upload_dialog": "Yukleme penceresi",
-              "edit": "Duzenleme sayfasi"}
+              "edit": "Duzenleme sayfasi", "chatgpt": "ChatGPT (kapak gorseli)"}
     for section, rows in report.items():
         if not rows:
             continue

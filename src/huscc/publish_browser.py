@@ -358,7 +358,28 @@ def probe(cfg: Config, *, video_id: str = "") -> dict:
     try:
         session.start()
         report = studio.probe(session, video_id=video_id)
+        report["chatgpt"] = _probe_chatgpt(session)
         _remember(cfg)
         return report
     finally:
         session.stop()
+
+
+#: ChatGPT sayfasinda her zaman gorunur olmasi gereken anahtarlar.
+#: `chatgpt_generated_image` ve `chatgpt_stop_button` yalnizca uretim sirasinda
+#: var oldugu icin sondaya girmez.
+PROBE_CHATGPT = ["chatgpt_ready", "chatgpt_input", "chatgpt_send"]
+
+
+def _probe_chatgpt(session) -> dict:
+    """Kapak gorseli secicilerini dener. Giris yoksa sessizce atlanir."""
+    chatgpt = platforms.by_key("chatgpt")
+    try:
+        if not platforms.is_signed_in(session, chatgpt):
+            info("  ChatGPT atlandi (giris yok - huscc login --only chatgpt).")
+            return {}
+        session.page.wait_for_timeout(1_500)
+        return {key: studio._check(session, key) for key in PROBE_CHATGPT}
+    except Exception as exc:  # noqa: BLE001
+        warn(f"  ChatGPT sondasi calistirilamadi: {exc}")
+        return {}
