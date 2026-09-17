@@ -142,9 +142,20 @@ def link(root: Path, *, add_path: bool = True) -> dict:
     return result
 
 
-def is_linked() -> bool:
+def is_linked(root: Path | None = None) -> bool:
+    """Kisayol var mi - `root` verilirse *bu* depoyu gosteriyor mu."""
     shim = shim_dir() / ("huscc.cmd" if IS_WIN else "huscc")
-    return shim.exists()
+    if not (shim.exists() or shim.is_symlink()):
+        return False
+    if root is None:
+        return True
+    target = venv_huscc(root)
+    try:
+        if shim.is_symlink():
+            return Path(os.readlink(shim)).resolve() == target.resolve()
+        return str(target) in shim.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
 
 
 # ------------------------------------------------------------ eksik tamamla

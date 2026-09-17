@@ -57,22 +57,25 @@ python check.py           # kurulumdan ÖNCE: ne eksik? (hiçbir bağımlılık 
 python bootstrap.py       # sanal ortam, bağımlılıklar, ffmpeg, Chrome + doğrulama
 ```
 
-`bootstrap.py` sonunda **otomatik olarak `huscc selftest` çalıştırır.** Çıktıda
-`MAKINE HAZIR` yazıyorsa makine gerçekten hazırdır — tahmin değil, ölçüm.
+`bootstrap.py` iki şey daha yapar: **`huscc` komutunu PATH'e bağlar** (Windows'ta
+`%LOCALAPPDATA%\Programs\HusCC\bin`, diğerlerinde `~/.local/bin`) ve sonunda
+**otomatik olarak `huscc selftest` çalıştırır.** Çıktıda `MAKINE HAZIR` yazıyorsa
+makine gerçekten hazırdır — tahmin değil, ölçüm.
 
-Sonra tek seferlik giriş:
+Sonra tek seferlik giriş — **yeni bir terminal aç** (PATH yeni güncellendi):
 
 ```bash
-.venv/Scripts/huscc login     # Windows
-.venv/bin/huscc login         # macOS / Linux
+huscc login          # gereken platformları sırayla açar
+huscc login --check  # hiçbir şey açmadan durumu göster
 ```
 
-Görünür bir Chrome penceresi açılır; girişi sen yaparsın. Oturum
+Sihirbaz YouTube ve ChatGPT'yi sırayla açar; zaten girilmiş olanı atlar,
+istemediğini Ctrl+C ile geçersin. Girişi sen yaparsın; oturumlar
 `secrets/browser-profile/` içinde saklanır, bir daha sorulmaz.
 
 ### Komut nasıl çalıştırılır
 
-PowerShell'de geçerli klasör PATH'te değildir, bu yüzden:
+Kurulumdan sonra her yerden `huscc <komut>` çalışır. PATH bağlanmadıysa:
 
 | | Komut |
 |---|---|
@@ -80,8 +83,8 @@ PowerShell'de geçerli klasör PATH'te değildir, bu yüzden:
 | Windows (tam yol) | `.venv\Scripts\huscc publish "video adı"` |
 | macOS / Linux | `./huscc publish "video adı"` |
 
-Sık kullanacaksan bu oturum için PATH'e ekle:
-`$env:PATH = "$PWD\.venv\Scripts;$env:PATH"`
+Kısayolu sonradan kurmak ya da eksik bir bileşeni (ffmpeg, Chrome, Playwright,
+altyazı motoru) tamamlamak için: `huscc doctor --fix`
 
 ### Makine gerçekten hazır mı?
 
@@ -136,6 +139,7 @@ huscc studio                         # Studio'yu HusCC tarayıcısında aç
 huscc web                            # yerel panel (127.0.0.1:8765)
 huscc status                         # yayın geçmişi
 huscc doctor --browser               # oturumu da doğrulayarak kontrol
+huscc doctor --fix                   # eksik bileşeni kur, komutu PATH'e bağla
 ```
 
 ### İlk kurulumdan sonra: `huscc probe`

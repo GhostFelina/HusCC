@@ -207,10 +207,10 @@ def ensure_dirs() -> None:
 
 
 # ------------------------------------------------------------------ dogrula
-def link_command() -> None:
+def link_command() -> bool:
     """`huscc` komutunu PATH'e bagla (yeni makinede tek adim kalmasin)."""
     say(">", "'huscc' komutu PATH'e baglaniyor...")
-    run([str(venv_python()), "-m", "huscc.installer", str(ROOT)], check=False)
+    return run([str(venv_python()), "-m", "huscc.installer", str(ROOT)], check=False) == 0
 
 
 def verify() -> int:
@@ -241,11 +241,11 @@ def main() -> int:
     if not args.no_chrome:
         ensure_browser()
     ensure_dirs()
-    link_command()
+    linked = link_command()
 
     code = 0 if args.no_test else verify()
 
-    huscc = huscc_exe()
+    huscc = "huscc" if linked else str(huscc_exe())
     print()
     print("=" * 64)
     if code == 0:

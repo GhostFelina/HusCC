@@ -138,8 +138,10 @@ def cmd_doctor(args) -> int:
     else:
         info("OPENAI_API_KEY yok - kapak icin --image-source browser ya da frame")
 
-    if installer.is_linked():
+    if installer.is_linked(cfg.root):
         ok(f"'huscc' komutu PATH'te ({installer.shim_dir()})")
+    elif installer.is_linked():
+        warn("'huscc' kisayolu baska bir kopyayi gosteriyor -> huscc doctor --fix")
     else:
         info("'huscc' komutu PATH'te degil -> huscc doctor --fix")
 
@@ -150,10 +152,10 @@ def cmd_doctor(args) -> int:
             installer.fix(missing)
         else:
             info("Kurulacak bilesen yok.")
-        if not installer.is_linked():
+        if not installer.is_linked(cfg.root):
             try:
                 result = installer.link(cfg.root)
-                ok(f"Kisayol yazildi: {result['shim']}")
+                ok(f"Kisayol bu depoya baglandi: {result['shim']}")
                 if result["path_updated"]:
                     info("PATH guncellendi - yeni bir terminalde 'huscc' calisir.")
             except HusccError as exc:

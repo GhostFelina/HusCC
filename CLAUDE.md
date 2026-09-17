@@ -47,22 +47,28 @@ python bootstrap.py       # 2) her seyi kurar ve sonunda selftest calistirir
 Gormediysen orada yazan eksigi coz ve `huscc selftest` ile tekrar dogrula.
 
 ```bash
-huscc login               # 3) bir kerelik Google girisi (kullanici yapar)
+huscc login               # 3) giris sihirbazi: YouTube + ChatGPT (kullanici yapar)
 huscc probe               # 4) Studio secicilerini dogrula (yukleme yapmaz)
 ```
 
+`huscc login --check` hicbir sey acmadan hangi platformda oturum oldugunu yazar;
+`--only youtube` ile tek platform. Giris eksikse ilk yayin patlar, once bunu bak.
+
 ### Komutu nasil calistiracaksin
 
-PATH'e guvenme. **Her zaman tam yolu kullan:**
+`bootstrap.py` sonunda `huscc` komutunu PATH'e baglar (Windows'ta
+`%LOCALAPPDATA%/Programs/HusCC/bin`, mac/Linux'ta `~/.local/bin`) - ama PATH
+yalnizca **yeni acilan** terminalde gecerlidir. Ayni oturumda calisiyorsan tam
+yolu kullan:
 
 * Windows : `.venv\Scripts\huscc <komut>`
 * mac/Linux: `.venv/bin/huscc <komut>`
 
 Depo kokundeki `huscc.cmd` (Windows) ve `./huscc` (mac/Linux) sarmalayicilari da
-ayni isi yapar. PowerShell'de gecerli klasor PATH'te olmadigi icin `huscc` diye
-yazmak calismaz; `.\huscc.cmd` yaz.
+ayni isi yapar. Kisayol hic yazilmadiysa: `huscc doctor --fix`.
 
-`bootstrap.py` her seyi kurar. Yine de eksik kalirsa:
+`bootstrap.py` her seyi kurar. Yine de eksik kalirsa once `huscc doctor --fix`
+dene (eksik bileseni kurar, kisayolu yazar); elle cozmek gerekirse:
 
 * **Playwright yok** → `uv pip install --python .venv playwright`
 * **Chrome yok** → `winget install --id Google.Chrome -e`
