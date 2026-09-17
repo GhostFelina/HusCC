@@ -79,8 +79,10 @@ def is_closed_error(exc: BaseException) -> bool:
             "target page, context or browser has been closed",
             "targetclosederror",
             "browser has been closed",
+            "browser has been disconnected",
+            "browser closed",
             "connection closed",
-            "websocket",
+            "websocket connection closed",
         )
     ) or type(exc).__name__ == "TargetClosedError"
 
@@ -130,11 +132,34 @@ class Session:
             "--disable-session-crashed-bubble",
             "--window-size=1600,1000",
         ]
-        self._ctx = self._launch_with_fallback(args)
+        self._ctx = self._launch_retrying_lock(args)
 
         self._ctx.set_default_timeout(30_000)
         self._page = self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
         return self
+
+    def _launch_retrying_lock(self, args: list[str], *, attempts: int = 4, wait: float = 2.0):
+        """Profil kilidi az once kapanan bir pencereden kalmis olabilir.
+
+        Chrome, kapandiktan birkac saniye sonra SingletonLock dosyasini birakir.
+        `publish` icinde iki oturum art arda acildigi icin (kapak icin ChatGPT,
+        sonra yukleme) ilk deneme bu yuzden kilide takilabiliyordu; kisa araliklarla
+        yeniden deniyoruz. Gercekten acik bir pencere varsa yine ayni hata doner.
+        """
+        for attempt in range(1, attempts + 1):
+            try:
+                return self._launch_with_fallback(args)
+            except HusccError as exc:
+                if "baska bir pencerede acik" not in str(exc) or attempt == attempts:
+                    raise
+                if attempt == 1:
+                    info("Profil kilidi hala birakilmamis, bekleniyor...")
+                time.sleep(wait)
+                self._pw = None
+                from playwright.sync_api import sync_playwright
+
+                self._pw = sync_playwright().start()
+        raise HusccError("Tarayici baslatilamadi.")  # buraya dusulmez
 
     def _launch_with_fallback(self, args: list[str]):
         """Once istenen tarayici, olmazsa Edge, en son Playwright'in Chromium'u."""
